@@ -79,6 +79,14 @@ The system follows a modular, layered architecture with clear separation of conc
 
 ## Recent Changes
 
+✅ **July 05, 2025 - Security Vulnerability Fix**
+- **CRITICAL SECURITY FIX**: Removed hardcoded OpenAI API key from config.json
+- Created secure configuration template (config.template.json)
+- Added comprehensive .gitignore to prevent API key exposure
+- Created SECURITY.md with detailed secure configuration guide
+- Verified environment variable-based configuration works correctly
+- Updated documentation to emphasize secure API key management
+
 ✅ **July 05, 2025 - Complete MCP Server Implementation & Full Testing**
 - Implemented full MemoryOS MCP server with FastMCP framework
 - Created three production-ready MCP tools: add_memory, retrieve_memory, get_user_profile

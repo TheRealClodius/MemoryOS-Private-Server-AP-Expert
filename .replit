@@ -20,6 +20,10 @@ args = "Install Dependencies"
 task = "workflow.run"
 args = "install_and_test"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "MemoryOS Server"
+
 [[workflows.workflow]]
 name = "Install Dependencies"
 author = "agent"
@@ -35,3 +39,11 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "pip install mcp openai numpy faiss-cpu pydantic"
+
+[[workflows.workflow]]
+name = "MemoryOS Server"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python mcp_server.py"

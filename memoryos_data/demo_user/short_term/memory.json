@@ -1,0 +1,38 @@
+[
+  {
+    "user_input": "What is the capital of France?",
+    "agent_response": "The capital of France is Paris, a beautiful city known for its art, culture, and the iconic Eiffel Tower.",
+    "timestamp": "2025-07-05T15:29:43.274601",
+    "meta_data": {
+      "test": true,
+      "topic": "geography",
+      "country": "France"
+    },
+    "access_count": 0,
+    "last_accessed": "2025-07-05T15:29:43.274601"
+  },
+  {
+    "user_input": "Tell me about French cuisine",
+    "agent_response": "French cuisine is renowned worldwide for its sophistication and variety. It includes famous dishes like coq au vin, bouillabaisse, ratatouille, and exquisite pastries like croissants and macarons.",
+    "timestamp": "2025-07-05T15:29:43.276277",
+    "meta_data": {
+      "test": true,
+      "topic": "food",
+      "country": "France"
+    },
+    "access_count": 0,
+    "last_accessed": "2025-07-05T15:29:43.276277"
+  },
+  {
+    "user_input": "What programming languages should I learn?",
+    "agent_response": "For beginners, I recommend starting with Python due to its readable syntax and versatility. Then consider JavaScript for web development, and later explore languages like Java, C++, or specialized languages based on your interests.",
+    "timestamp": "2025-07-05T15:29:43.277349",
+    "meta_data": {
+      "test": true,
+      "topic": "programming",
+      "advice": true
+    },
+    "access_count": 0,
+    "last_accessed": "2025-07-05T15:29:43.277349"
+  }
+]

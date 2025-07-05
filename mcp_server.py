@@ -457,7 +457,7 @@ async def main():
         
         # Run MCP server with stdio transport
         async with stdio_server() as (read_stream, write_stream):
-            await mcp.run(read_stream, write_stream, mcp.create_initialization_options())
+            await mcp.run(read_stream, write_stream)
     
     except KeyboardInterrupt:
         print("\nServer interrupted by user", file=sys.stderr)

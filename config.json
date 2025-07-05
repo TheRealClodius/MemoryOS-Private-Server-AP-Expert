@@ -1,6 +1,6 @@
 {
-  "user_id": "default_user",
-  "openai_api_key": "",
+  "user_id": "demo_user",
+  "openai_api_key": "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",
   "openai_base_url": "https://api.openai.com/v1",
   "data_storage_path": "./memoryos_data",
   "assistant_id": "mcp_assistant",
@@ -10,25 +10,5 @@
   "mid_term_capacity": 2000,
   "long_term_knowledge_capacity": 100,
   "retrieval_queue_capacity": 7,
-  "mid_term_heat_threshold": 5.0,
-  "_comments": {
-    "user_id": "Unique identifier for the user - customize for each user",
-    "openai_api_key": "Required: Set your OpenAI API key here or use OPENAI_API_KEY env var",
-    "openai_base_url": "OpenAI API endpoint - change for custom deployments",
-    "data_storage_path": "Directory where MemoryOS stores user data",
-    "assistant_id": "Unique identifier for this assistant instance",
-    "llm_model": "OpenAI model for text processing (gpt-4o-mini, gpt-4, etc.)",
-    "embedding_model": "OpenAI embedding model (text-embedding-3-small/large)",
-    "short_term_capacity": "Maximum conversation pairs in short-term memory",
-    "mid_term_capacity": "Maximum segments in mid-term memory",
-    "long_term_knowledge_capacity": "Maximum knowledge entries per category",
-    "retrieval_queue_capacity": "Maximum results returned per retrieval category",
-    "mid_term_heat_threshold": "Heat threshold for promoting segments to long-term"
-  },
-  "gemini_optimization": {
-    "enabled": true,
-    "consistent_embeddings": true,
-    "structured_returns": true,
-    "description": "Optimized for Gemini client integration while maintaining OpenAI embedding consistency"
-  }
+  "mid_term_heat_threshold": 5.0
 }

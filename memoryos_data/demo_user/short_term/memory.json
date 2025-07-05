@@ -34,5 +34,13 @@
     },
     "access_count": 0,
     "last_accessed": "2025-07-05T15:29:43.277349"
+  },
+  {
+    "user_input": "What is Python?",
+    "agent_response": "Python is a high-level programming language known for its simplicity and readability.",
+    "timestamp": "2025-07-05T15:51:31.356527",
+    "meta_data": {},
+    "access_count": 0,
+    "last_accessed": "2025-07-05T15:51:31.356527"
   }
 ]

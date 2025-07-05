@@ -33,21 +33,18 @@ MemoryOS enables AI assistants to maintain persistent memory across conversation
 
 3. **Configure your OpenAI API key** (choose one method):
 
-   **Option A: Environment Variable**
+   **Option A: Environment Variable (Recommended)**
    ```bash
-   export OPENAI_API_KEY="your_api_key_here"
+   export OPENAI_API_KEY="your_actual_openai_api_key"
    ```
 
    **Option B: Configuration File**
-   Create `config.json`:
-   ```json
-   {
-     "user_id": "your_username",
-     "openai_api_key": "your_api_key_here",
-     "data_storage_path": "./memoryos_data",
-     "assistant_id": "mcp_assistant"
-   }
+   ```bash
+   cp config.template.json config.json
+   # Edit config.json to add your OpenAI API key
    ```
+   
+   **⚠️ IMPORTANT**: See `SECURITY.md` for secure configuration details.
 
 4. **Test the server:**
    ```bash
@@ -68,24 +65,25 @@ MemoryOS enables AI assistants to maintain persistent memory across conversation
 
 ### Step 2: Configure MemoryOS
 
-Create a `config.json` file in the MemoryOS directory:
+**⚠️ SECURITY NOTICE**: Never put API keys directly in configuration files that might be committed to version control. Use the secure configuration method below.
 
-```json
-{
-  "user_id": "your_unique_username",
-  "openai_api_key": "sk-your-actual-api-key-here",
-  "openai_base_url": "https://api.openai.com/v1",
-  "data_storage_path": "./memoryos_data",
-  "assistant_id": "mcp_assistant",
-  "llm_model": "gpt-4o-mini",
-  "embedding_model": "text-embedding-3-small",
-  "short_term_capacity": 10,
-  "mid_term_capacity": 2000,
-  "long_term_knowledge_capacity": 100,
-  "retrieval_queue_capacity": 7,
-  "mid_term_heat_threshold": 5.0
-}
+**Option A: Environment Variable (Recommended)**
+```bash
+export OPENAI_API_KEY="your_actual_api_key_here"
 ```
+
+**Option B: Local Configuration File**
+1. Copy the configuration template:
+```bash
+cp config.template.json config.json
+```
+
+2. Add your OpenAI API key to the copied `config.json`:
+```bash
+# Edit config.json and add: "openai_api_key": "your_actual_api_key_here"
+```
+
+The configuration template includes all necessary settings. See `SECURITY.md` for detailed secure configuration guidance.
 
 **Configuration Options:**
 - `user_id`: Unique identifier for the user (creates separate data directory)
@@ -194,9 +192,10 @@ Retrieves user profile and knowledge summary.
 ### Server Won't Start
 
 **Error: "OpenAI API key is required"**
-- Verify your API key is correctly set in `config.json`
-- Ensure the key starts with `sk-` and is complete
-- Check your OpenAI account has available quota
+- Verify your API key is set as environment variable: `echo $OPENAI_API_KEY`
+- Or check it's correctly added to your `config.json` file
+- Ensure your OpenAI account has available quota
+- See `SECURITY.md` for secure configuration guidance
 
 **Error: "Module not found"**
 - Install dependencies: `pip install mcp openai numpy faiss-cpu pydantic`

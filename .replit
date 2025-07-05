@@ -47,3 +47,6 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python mcp_server.py"
+
+[deployment]
+deploymentTarget = "cloudrun"

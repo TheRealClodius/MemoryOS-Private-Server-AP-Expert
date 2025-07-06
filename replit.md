@@ -79,6 +79,20 @@ The system follows a modular, layered architecture with clear separation of conc
 
 ## Recent Changes
 
+✅ **July 06, 2025 - CRITICAL SECURITY FIX: User Data Isolation Vulnerability**
+- **SECURITY VULNERABILITY RESOLVED**: Fixed major data leakage issue in API endpoints
+- **Problem**: Server was using single global MemoryOS instance, causing cross-user data exposure
+- **Solution**: Implemented per-user MemoryOS instances with proper isolation
+- **API Security Enhancements**:
+  - All endpoints now require user_id parameter for data isolation
+  - Added user_id validation (cannot be empty/null)
+  - Each user gets separate MemoryOS instance with isolated data storage
+  - Memory retrieval now filters by user_id - NO CROSS-USER DATA LEAKAGE
+- **Database Query Filtering**: Fixed retrieve_memory to filter by user_id
+- **Parameter Validation**: Added comprehensive user_id validation across all endpoints
+- **VERIFIED WORKING**: Tested user isolation - Alice cannot see Bob's memories
+- **Security Features**: user_data_isolation, per_user_memory_instances, user_id_validation
+
 ✅ **July 06, 2025 - Dynamic User Management System Implemented**
 - **USER ID ISSUES RESOLVED**: Eliminated all hardcoded user IDs and paths
 - Implemented automatic UUID generation for user IDs when none provided

@@ -25,6 +25,16 @@ except ImportError as e:
     print(f"Import error: {e}", file=sys.stderr)
     sys.exit(1)
 
+# Import FastAPI for HTTP health check endpoint
+try:
+    from fastapi import FastAPI
+    from fastapi.responses import JSONResponse
+    import uvicorn
+    FASTAPI_AVAILABLE = True
+except ImportError:
+    FASTAPI_AVAILABLE = False
+    print("FastAPI not available, HTTP health check disabled", file=sys.stderr)
+
 try:
     from memoryos import Memoryos
 except ImportError as e:
@@ -442,37 +452,154 @@ async def get_user_profile(
             user_profile=f"Error retrieving user profile: {str(e)}"
         )
 
-async def main():
-    """Main server function"""
+async def init_server():
+    """Initialize the MemoryOS server"""
     global memoryos_instance
     
+    # Load configuration
+    print("Loading MemoryOS configuration...", file=sys.stderr)
+    config = load_config()
+    
+    # Initialize MemoryOS
+    print(f"Initializing MemoryOS for user: {config['user_id']}", file=sys.stderr)
+    memoryos_instance = init_memoryos(config)
+    
+    # Verify initialization by checking memory stats
     try:
-        # Load configuration
-        print("Loading MemoryOS configuration...", file=sys.stderr)
-        config = load_config()
-        
-        # Initialize MemoryOS
-        print(f"Initializing MemoryOS for user: {config['user_id']}", file=sys.stderr)
-        memoryos_instance = init_memoryos(config)
-        
-        # Verify initialization by checking memory stats
-        try:
-            stats = memoryos_instance.get_memory_stats()
-            print(f"MemoryOS initialization verified:", file=sys.stderr)
-            print(f"  Short-term memories: {stats.get('short_term', {}).get('total_entries', 0)}", file=sys.stderr)
-            print(f"  User data path: {memoryos_instance.data_storage_path}/{memoryos_instance.user_id}", file=sys.stderr)
-        except Exception as e:
-            print(f"Warning: Could not verify MemoryOS initialization: {e}", file=sys.stderr)
-        
-        print(f"MemoryOS MCP Server started successfully", file=sys.stderr)
-        print(f"User: {config['user_id']}, Assistant: {config['assistant_id']}", file=sys.stderr)
-        print(f"Data storage: {config['data_storage_path']}", file=sys.stderr)
-        print(f"LLM model: {config['llm_model']}, Embedding model: {config['embedding_model']}", file=sys.stderr)
+        stats = memoryos_instance.get_memory_stats()
+        print(f"MemoryOS initialization verified:", file=sys.stderr)
+        print(f"  Short-term memories: {stats.get('short_term', {}).get('total_entries', 0)}", file=sys.stderr)
+        print(f"  User data path: {memoryos_instance.data_storage_path}/{memoryos_instance.user_id}", file=sys.stderr)
+    except Exception as e:
+        print(f"Warning: Could not verify MemoryOS initialization: {e}", file=sys.stderr)
+    
+    print(f"MemoryOS MCP Server started successfully", file=sys.stderr)
+    print(f"User: {config['user_id']}, Assistant: {config['assistant_id']}", file=sys.stderr)
+    print(f"Data storage: {config['data_storage_path']}", file=sys.stderr)
+    print(f"LLM model: {config['llm_model']}, Embedding model: {config['embedding_model']}", file=sys.stderr)
+    
+    return config
+
+async def run_mcp_server():
+    """Run the MCP server with stdio transport"""
+    try:
+        await init_server()
+        print("Starting MCP server with stdio transport...", file=sys.stderr)
         
         # Run MCP server with stdio transport
-        async with stdio_server() as (read_stream, write_stream):
-            await mcp.run(read_stream, write_stream)
+        await mcp.run(transport="stdio")
     
+    except KeyboardInterrupt:
+        print("\nMCP server interrupted by user", file=sys.stderr)
+    except Exception as e:
+        print(f"MCP server error: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+def create_health_check_app():
+    """Create FastAPI app for health checks"""
+    if not FASTAPI_AVAILABLE:
+        return None
+    
+    app = FastAPI(title="MemoryOS MCP Server", version="1.0.0")
+    
+    @app.get("/")
+    async def health_check():
+        """Health check endpoint for deployment"""
+        try:
+            # Initialize server if not already done
+            if memoryos_instance is None:
+                await init_server()
+            
+            return JSONResponse({
+                "status": "healthy",
+                "service": "MemoryOS MCP Server",
+                "version": "1.0.0",
+                "timestamp": datetime.now().isoformat(),
+                "capabilities": [
+                    "add_memory",
+                    "retrieve_memory", 
+                    "get_user_profile"
+                ]
+            })
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "error": str(e),
+                    "timestamp": datetime.now().isoformat()
+                }
+            )
+    
+    @app.get("/health")
+    async def detailed_health():
+        """Detailed health check"""
+        try:
+            if memoryos_instance is None:
+                await init_server()
+            
+            # Test basic functionality
+            stats = memoryos_instance.get_memory_stats()
+            
+            return JSONResponse({
+                "status": "healthy",
+                "service": "MemoryOS MCP Server",
+                "version": "1.0.0",
+                "timestamp": datetime.now().isoformat(),
+                "memory_stats": stats,
+                "openai_configured": bool(os.getenv("OPENAI_API_KEY"))
+            })
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "error": str(e),
+                    "timestamp": datetime.now().isoformat()
+                }
+            )
+    
+    return app
+
+async def run_http_server():
+    """Run HTTP server for health checks"""
+    if not FASTAPI_AVAILABLE:
+        print("FastAPI not available, cannot run HTTP server", file=sys.stderr)
+        return
+    
+    app = create_health_check_app()
+    if app is None:
+        return
+    
+    # Get port from environment or use default
+    port = int(os.getenv("PORT", "5000"))
+    
+    print(f"Starting HTTP health check server on port {port}...", file=sys.stderr)
+    
+    config = uvicorn.Config(
+        app=app,
+        host="0.0.0.0",
+        port=port,
+        log_level="info"
+    )
+    server = uvicorn.Server(config)
+    await server.serve()
+
+async def main():
+    """Main server function"""
+    try:
+        # Check if we should run HTTP server (for deployment) or MCP server (for local use)
+        mode = os.getenv("SERVER_MODE", "mcp").lower()
+        
+        if mode == "http" or os.getenv("PORT"):
+            # Run HTTP server for deployment
+            await run_http_server()
+        else:
+            # Run MCP server for local use
+            await run_mcp_server()
+            
     except KeyboardInterrupt:
         print("\nServer interrupted by user", file=sys.stderr)
     except Exception as e:

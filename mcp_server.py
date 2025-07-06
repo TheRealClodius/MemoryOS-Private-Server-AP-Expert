@@ -269,8 +269,13 @@ async def retrieve_memory(
                 retrieved_assistant_knowledge=[]
             )
         
-        # Generate embedding for the query
-        query_embedding = memoryos_instance._generate_embedding(query.strip())
+        # Generate embedding for the query (fallback to None if generation fails)
+        query_embedding = None
+        try:
+            query_embedding = memoryos_instance._generate_embedding(query.strip())
+        except Exception as e:
+            print(f"Warning: Embedding generation failed, using fallback: {e}", file=sys.stderr)
+            # Continue with None embedding - short-term memory will still work
         
         # Retrieve context from all memory layers
         retrieval_results = memoryos_instance.retriever.retrieve_context(
@@ -449,6 +454,15 @@ async def main():
         # Initialize MemoryOS
         print(f"Initializing MemoryOS for user: {config['user_id']}", file=sys.stderr)
         memoryos_instance = init_memoryos(config)
+        
+        # Verify initialization by checking memory stats
+        try:
+            stats = memoryos_instance.get_memory_stats()
+            print(f"MemoryOS initialization verified:", file=sys.stderr)
+            print(f"  Short-term memories: {stats.get('short_term', {}).get('total_entries', 0)}", file=sys.stderr)
+            print(f"  User data path: {memoryos_instance.data_storage_path}/{memoryos_instance.user_id}", file=sys.stderr)
+        except Exception as e:
+            print(f"Warning: Could not verify MemoryOS initialization: {e}", file=sys.stderr)
         
         print(f"MemoryOS MCP Server started successfully", file=sys.stderr)
         print(f"User: {config['user_id']}, Assistant: {config['assistant_id']}", file=sys.stderr)

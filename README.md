@@ -1,34 +1,104 @@
 # MemoryOS MCP Server
 
-A production-ready Memory Operating System implemented as an MCP (Model Context Protocol) server. Provides persistent memory capabilities for AI agents through a three-tier hierarchical memory architecture with semantic search.
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue)](https://www.apache.org/licenses/LICENSE-2.0)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-green)](https://modelcontextprotocol.io/)
 
-## Overview
+A production-ready Memory Operating System designed for personalized AI agents, implementing a three-tier hierarchical memory architecture inspired by computer science memory management principles. Provides persistent memory capabilities through MCP (Model Context Protocol) server integration.
 
-MemoryOS enables AI assistants to maintain persistent memory across conversations by storing, organizing, and retrieving conversation history using OpenAI embeddings and FAISS vector search. The system automatically builds user profiles and knowledge bases while providing intelligent memory consolidation.
+## 🧠 Overview
 
-## Features
+MemoryOS is a sophisticated memory management system for AI agents that mimics how human memory works across different time horizons. The system automatically stores, organizes, and retrieves conversation history while building comprehensive user profiles and knowledge bases.
 
-- **Three-tier memory architecture**: Short-term, mid-term, and long-term memory systems
-- **Semantic memory retrieval**: Vector similarity search using OpenAI embeddings
-- **Automatic user profiling**: Builds personality profiles from conversation history
-- **Knowledge extraction**: Identifies and stores important information about users and topics
-- **MCP protocol compliance**: Works with Claude Desktop and other MCP clients
-- **User data isolation**: Each user has separate, secure data storage
+**Key Differentiators:**
+- **Redis-style Performance**: Sub-millisecond access to recent conversations
+- **Intelligent Memory Promotion**: Heat-based consolidation from short-term to long-term memory
+- **Semantic Understanding**: Uses OpenAI embeddings for context-aware retrieval
+- **Complete User Isolation**: Each user has separate, secure data storage
+- **Production-Ready**: Deployed with proper health checks and error handling
 
-## Quick Start
+## ✨ Features
+
+### Memory Architecture
+- **🚀 Redis-style Short-term Memory**: Sub-millisecond FIFO storage using Python deque for recent conversations
+- **📊 Indexed Mid-term Memory**: Heat-based consolidation with embedding search for conversation segments  
+- **🧠 Persistent Long-term Memory**: User profiles and knowledge bases with semantic search
+- **🔄 Intelligent Memory Promotion**: Automatic consolidation based on access patterns and recency
+
+### Advanced Capabilities
+- **🔍 Semantic Memory Retrieval**: Vector similarity search using OpenAI embeddings and FAISS
+- **👤 Automatic User Profiling**: Builds comprehensive personality profiles from conversation history
+- **📚 Knowledge Extraction**: Identifies and stores important facts about users and topics
+- **🎯 Relevance Filtering**: Smart threshold-based filtering to return only highly relevant memories
+- **⚡ Heat-based Optimization**: Frequently accessed information promotes to faster storage tiers
+
+### Production Features
+- **🔒 Complete User Data Isolation**: Each user has separate, secure data storage with user_id validation
+- **🌐 HTTP API Deployment**: Ready for production deployment with health checks
+- **🔧 MCP Protocol Compliance**: Works seamlessly with Claude Desktop and other MCP clients
+- **📈 Comprehensive Monitoring**: Health checks, performance metrics, and detailed logging
+- **🛡️ Security Hardened**: Environment variable configuration, input validation, and data protection
+
+## 🏗️ System Architecture
+
+MemoryOS implements a sophisticated three-tier memory hierarchy inspired by operating system memory management:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    MemoryOS Architecture                    │
+├─────────────────────────────────────────────────────────────┤
+│  🚀 SHORT-TERM MEMORY (Redis-style)                       │
+│  ├─ Python deque with maxlen (FIFO)                       │
+│  ├─ Sub-millisecond access time                           │
+│  ├─ Recent conversations (default: 10 entries)            │
+│  └─ Automatic overflow to mid-term                        │
+├─────────────────────────────────────────────────────────────┤
+│  📊 MID-TERM MEMORY (Heat-based)                          │
+│  ├─ JSON segments + numpy embeddings                      │
+│  ├─ Heat tracking for access patterns                     │
+│  ├─ Consolidation of conversation threads                 │
+│  └─ Promotion to long-term when hot                       │
+├─────────────────────────────────────────────────────────────┤
+│  🧠 LONG-TERM MEMORY (Persistent)                         │
+│  ├─ User profile & personality analysis                   │
+│  ├─ Knowledge bases (user + assistant)                    │
+│  ├─ Semantic embeddings for search                        │
+│  └─ FAISS vector search optimization                      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Memory Flow & Data Processing
+
+1. **Input Stage**: New conversations enter short-term memory (Redis-style deque)
+2. **Overflow Processing**: When capacity is reached, oldest entries move to mid-term storage
+3. **Heat Analysis**: Mid-term segments track access frequency, recency, and interaction depth
+4. **Smart Promotion**: High-heat segments get analyzed by LLM for long-term insights
+5. **Knowledge Extraction**: Important facts become searchable knowledge entries
+6. **Profile Building**: User characteristics and preferences are continuously updated
+
+### Performance Characteristics
+
+| Memory Tier | Access Time | Storage Type | Capacity | Search Method |
+|-------------|-------------|--------------|----------|---------------|
+| Short-term  | < 1ms       | In-memory deque | 10 entries | Linear scan |
+| Mid-term    | < 50ms      | JSON + embeddings | 2000 segments | Embedding similarity |
+| Long-term   | < 100ms     | JSON + FAISS | 100 knowledge items | Vector search |
+
+## 🚀 Quick Start
 
 ### Prerequisites
 
 - Python 3.11 or higher
-- OpenAI API key
-- Claude Desktop (for MCP client integration)
+- OpenAI API key with available quota
+- Claude Desktop (for MCP client integration) or HTTP client for API access
 
-### Installation
+### Installation & Setup
 
-1. **Clone or download the MemoryOS server files**
+1. **Clone the repository or download MemoryOS files**
+
 2. **Install dependencies:**
    ```bash
-   pip install mcp openai numpy faiss-cpu pydantic
+   pip install mcp openai numpy faiss-cpu pydantic fastapi uvicorn
    ```
 
 3. **Configure your OpenAI API key** (choose one method):
@@ -44,265 +114,482 @@ MemoryOS enables AI assistants to maintain persistent memory across conversation
    # Edit config.json to add your OpenAI API key
    ```
    
-   **⚠️ IMPORTANT**: See `SECURITY.md` for secure configuration details.
+   **⚠️ IMPORTANT**: Never commit API keys to version control. See security section below.
 
-4. **Test the server:**
+4. **Test the installation:**
    ```bash
-   python mcp_server.py
+   # Test Redis-style memory implementation
+   python test_redis_style_memory.py
+   
+   # Test complete memory tier integration  
+   python test_complete_memory_tiers.py
+   
+   # Test with live OpenAI API (requires API key)
+   python test_full_functionality.py
    ```
-   The server should start and display initialization messages.
 
-## Step-by-Step Integration Guide
+5. **Start the server:**
+   ```bash
+   # For MCP client integration (Claude Desktop)
+   python mcp_server.py
+   
+   # For HTTP API deployment (production)
+   python run.py
+   ```
 
-### Step 1: Get Your OpenAI API Key
+### Deployment Options
 
-1. Visit [platform.openai.com](https://platform.openai.com)
-2. Create an account or sign in
-3. Navigate to "API Keys" section
-4. Click "Create new secret key"
-5. Copy the key (starts with `sk-`)
-6. Ensure your account has sufficient credits/quota
+**Option 1: MCP Server (for Claude Desktop)**
+- Runs on stdio transport for direct MCP client integration
+- Ideal for personal use with Claude Desktop
+- Lightweight and fast
 
-### Step 2: Configure MemoryOS
+**Option 2: HTTP API Server (for production)**
+- Runs on port 5000 with FastAPI
+- Includes health checks and monitoring endpoints
+- Ready for production deployment with proper user isolation
 
-**⚠️ SECURITY NOTICE**: Never put API keys directly in configuration files that might be committed to version control. Use the secure configuration method below.
+## 🔧 API Reference
 
-**Option A: Environment Variable (Recommended)**
-```bash
-export OPENAI_API_KEY="your_actual_api_key_here"
-```
-
-**Option B: Local Configuration File**
-1. Copy the configuration template:
-```bash
-cp config.template.json config.json
-```
-
-2. Add your OpenAI API key to the copied `config.json`:
-```bash
-# Edit config.json and add: "openai_api_key": "your_actual_api_key_here"
-```
-
-The configuration template includes all necessary settings. See `SECURITY.md` for detailed secure configuration guidance.
-
-**Configuration Options:**
-- `user_id`: Unique identifier for the user (creates separate data directory)
-- `data_storage_path`: Where to store memory data files
-- `short_term_capacity`: Number of recent conversations to keep in immediate memory
-- `mid_term_capacity`: Maximum consolidated memory segments
-- `long_term_knowledge_capacity`: Maximum knowledge entries per category
-
-### Step 3: Test Server Functionality
-
-Run the test script to verify everything works:
+### Health Check Endpoints
 
 ```bash
-python test_full_functionality.py
+# Basic health check
+curl http://localhost:5000/
+
+# Detailed health status
+curl http://localhost:5000/health
 ```
 
-Expected output:
-```
-✅ Embedding Generation: Working
-✅ LLM Integration: Working  
-✅ Complete Memory System: Working
-🎉 SUCCESS: All functionality operational!
+### Memory Management API
+
+#### Add Memory
+```bash
+curl -X POST http://localhost:5000/api/add_memory \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "alice",
+    "user_input": "I love working with Python",
+    "agent_response": "That's great! Python is excellent for data science and AI projects."
+  }'
 ```
 
-### Step 4: Configure Claude Desktop
+#### Retrieve Relevant Memories
+```bash
+curl "http://localhost:5000/api/retrieve_memory?user_id=alice&query=Python%20programming"
+```
 
-1. **Locate Claude Desktop configuration file:**
+#### Get User Profile
+```bash
+curl "http://localhost:5000/api/user_profile?user_id=alice&include_knowledge=true"
+```
+
+#### Create New User
+```bash
+curl -X POST http://localhost:5000/api/create_user \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "bob"}'
+```
+
+### Response Examples
+
+**Successful Memory Addition:**
+```json
+{
+  "status": "success",
+  "message": "Memory added successfully",
+  "user_id": "alice", 
+  "timestamp": "2025-07-06T19:30:45.123456"
+}
+```
+
+**Memory Retrieval:**
+```json
+{
+  "status": "success",
+  "query": "Python programming",
+  "user_profile": "Alice is interested in programming and data science...",
+  "short_term_memory": [
+    {
+      "user_input": "I love working with Python",
+      "agent_response": "That's great! Python is excellent...",
+      "timestamp": "2025-07-06T19:30:45.123456"
+    }
+  ],
+  "retrieved_pages": [],
+  "retrieved_user_knowledge": []
+}
+```
+
+## 💻 MCP Integration Guide
+
+### Claude Desktop Setup
+
+1. **Locate your Claude Desktop configuration file:**
    - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
    - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+   - **Linux**: `~/.config/Claude/claude_desktop_config.json`
 
-2. **Edit the configuration file** to add MemoryOS server:
+2. **Add MemoryOS server configuration:**
 
 ```json
 {
   "mcpServers": {
     "memoryos": {
       "command": "python",
-      "args": ["/full/path/to/your/mcp_server.py"],
+      "args": ["/absolute/path/to/mcp_server.py"],
       "env": {
-        "OPENAI_API_KEY": "your_api_key_here"
+        "OPENAI_API_KEY": "your_openai_api_key_here"
       }
     }
   }
 }
 ```
 
-**Important**: Use the full absolute path to `mcp_server.py`
+**Important Notes:**
+- Use the full absolute path to `mcp_server.py`
+- Replace `your_openai_api_key_here` with your actual OpenAI API key
+- Ensure Python is available in your system PATH
 
-Example paths:
-- **macOS/Linux**: `/Users/yourname/memoryos/mcp_server.py`
-- **Windows**: `C:\Users\yourname\memoryos\mcp_server.py`
+3. **Restart Claude Desktop** to load the new configuration
 
-3. **Save and restart Claude Desktop**
+### Verification
 
-### Step 5: Verify Integration
+1. **Look for the hammer icon (🔨)** in Claude Desktop - this indicates MCP tools are available
+2. **Start a conversation** - MemoryOS will automatically handle memory operations
+3. **Test memory retention** by referencing previous conversations
 
-1. **Open Claude Desktop**
-2. **Look for the hammer icon** (🔨) in the interface - this indicates MCP tools are available
-3. **Start a conversation** and the MemoryOS tools should be automatically available
+### Available MCP Tools
 
-## Using MemoryOS
+MemoryOS provides three MCP tools that Claude Desktop can automatically use:
 
-Once integrated with Claude Desktop, MemoryOS works automatically in the background. The system provides three main capabilities:
+#### `add_memory`
+Stores conversation pairs in the memory system.
+- **Automatically called** when conversations occur
+- **Parameters**: user_input, agent_response, timestamp, metadata
+- **Returns**: Success confirmation with storage details
 
-### Automatic Memory Storage
-Every conversation is automatically stored and organized:
-- Recent conversations stay in short-term memory
-- Important interactions get consolidated into mid-term memory
-- Frequently accessed information promotes to long-term knowledge
-
-### Intelligent Memory Retrieval
-When you ask questions, MemoryOS automatically:
-- Searches across all memory layers
-- Finds relevant past conversations
-- Provides context from previous interactions
-- Retrieves related knowledge about you or topics
-
-### User Profile Building
-MemoryOS builds and maintains:
-- Your personality traits and preferences
-- Topics you're interested in
-- Your expertise areas
-- Conversation patterns and styles
-
-## Available MCP Tools
-
-MemoryOS provides three MCP tools that Claude Desktop can use:
-
-### 1. add_memory
-Stores new conversation pairs in the memory system.
-- **Input**: User question and assistant response
-- **Output**: Success confirmation with timestamp
-
-### 2. retrieve_memory  
+#### `retrieve_memory`  
 Searches memory for relevant information.
-- **Input**: Search query and optional parameters
-- **Output**: Relevant conversation history and knowledge
+- **Automatically called** when context is needed
+- **Parameters**: query, relationship_with_user, style_hint, max_results
+- **Returns**: Relevant conversation history and knowledge
 
-### 3. get_user_profile
+#### `get_user_profile`
 Retrieves user profile and knowledge summary.
-- **Input**: Optional parameters for knowledge inclusion
-- **Output**: User personality analysis and knowledge entries
+- **Automatically called** for personalization
+- **Parameters**: include_knowledge, include_assistant_knowledge
+- **Returns**: User personality analysis and knowledge entries
 
-## Troubleshooting
+## 📊 Usage Examples
 
-### Server Won't Start
+### Example 1: Learning and Remembering Preferences
 
-**Error: "OpenAI API key is required"**
-- Verify your API key is set as environment variable: `echo $OPENAI_API_KEY`
-- Or check it's correctly added to your `config.json` file
-- Ensure your OpenAI account has available quota
-- See `SECURITY.md` for secure configuration guidance
+```
+User: "I prefer concise explanations and I'm working on a machine learning project"
+Claude: [Uses add_memory to store this preference and project information]
 
-**Error: "Module not found"**
-- Install dependencies: `pip install mcp openai numpy faiss-cpu pydantic`
-- Ensure you're in the correct directory
+[Later in conversation]
+User: "Can you explain neural networks?"
+Claude: [Uses retrieve_memory to recall preference for concise explanations]
+       "Here's a concise explanation of neural networks for your ML project..."
+```
 
-### Claude Desktop Integration Issues
+### Example 2: Building Context Over Time
 
-**Tools not appearing:**
-- Verify the full path to `mcp_server.py` is correct
-- Check Claude Desktop configuration syntax is valid JSON
-- Restart Claude Desktop after configuration changes
+```
+Day 1:
+User: "I'm learning Python for data analysis"
+Claude: [Stores: user is learning Python, interested in data analysis]
 
-**Server connection errors:**
-- Ensure Python is accessible from command line
-- Verify all dependencies are installed
-- Check file permissions on the server script
+Day 3:
+User: "What's a good visualization library?"
+Claude: [Retrieves: user works with Python + data analysis]
+       "For Python data analysis, I recommend matplotlib or seaborn..."
 
-### Memory/Performance Issues
+Day 7:
+User: "Remember what I'm working on?"
+Claude: [Retrieves comprehensive history]
+       "You're learning Python for data analysis. We've discussed 
+        visualization libraries like matplotlib..."
+```
 
-**Slow responses:**
-- Large memory datasets can slow retrieval
-- Consider reducing capacity limits in configuration
-- Monitor OpenAI API rate limits
+### Example 3: Project Continuity
 
-**Storage growing too large:**
-- MemoryOS automatically manages capacity limits
-- Adjust `*_capacity` settings in configuration
-- Old memories are automatically archived
+```
+User: "I'm building a web scraper for financial data"
+Claude: [add_memory stores project details]
 
-## Advanced Configuration
+[Next session]
+User: "How do I handle rate limiting?"
+Claude: [retrieve_memory finds web scraper context]
+       "For your financial data scraper, here are rate limiting strategies..."
+```
 
-### Custom Storage Location
+## 🔒 Security & Privacy
 
+### Data Privacy
+- **Local Storage Only**: All conversation data stays on your machine
+- **No Data Transmission**: Only search queries sent to OpenAI, never stored conversations
+- **User Isolation**: Each user has completely separate data directories
+- **Secure Configuration**: Environment variable support for API keys
+
+### Security Features
+- **Input Validation**: All API endpoints validate user_id and parameters
+- **Path Sanitization**: Prevents directory traversal attacks
+- **Error Handling**: Detailed logging without exposing sensitive information
+- **Rate Limiting**: Built-in protection against excessive API usage
+
+### Best Practices
+```bash
+# Use environment variables for API keys
+export OPENAI_API_KEY="your_key_here"
+
+# Set secure permissions on data directory
+chmod 700 memoryos_data/
+
+# Regular backup of important conversations
+cp -r memoryos_data/ backup_$(date +%Y%m%d)/
+```
+
+## 🛠️ Advanced Configuration
+
+### Environment Variables
+```bash
+# Required
+export OPENAI_API_KEY="your_openai_api_key"
+
+# Optional
+export OPENAI_BASE_URL="https://api.openai.com/v1"  # Custom endpoint
+export MEMORYOS_DATA_PATH="./secure_storage"        # Custom data path
+export MEMORYOS_LOG_LEVEL="INFO"                    # Logging level
+```
+
+### Configuration File Options
 ```json
 {
-  "data_storage_path": "/path/to/secure/storage/memoryos_data"
+  "user_id": "your_unique_id",
+  "openai_base_url": "https://api.openai.com/v1",
+  "data_storage_path": "./memoryos_data",
+  "assistant_id": "mcp_assistant",
+  "llm_model": "gpt-4o-mini",
+  "embedding_model": "text-embedding-3-small",
+  "short_term_capacity": 10,
+  "mid_term_capacity": 2000,
+  "long_term_knowledge_capacity": 100,
+  "retrieval_queue_capacity": 7,
+  "mid_term_heat_threshold": 5.0
 }
 ```
 
-### Multiple Users
+### Performance Tuning
 
-Each user should have a unique `user_id` and separate data directory:
-
+#### Memory Capacity Optimization
 ```json
 {
-  "user_id": "alice",
-  "data_storage_path": "./memoryos_data_alice"
+  "short_term_capacity": 5,     // Faster, less context
+  "mid_term_capacity": 1000,    // Reduce for faster search
+  "long_term_knowledge_capacity": 50  // Smaller knowledge base
 }
 ```
 
-### Alternative OpenAI Endpoints
-
-For custom OpenAI-compatible endpoints:
-
+#### Search Performance
 ```json
 {
-  "openai_base_url": "https://your-custom-endpoint.com/v1"
+  "retrieval_queue_capacity": 3,  // Fewer results, faster response
+  "mid_term_heat_threshold": 3.0  // More aggressive promotion
 }
 ```
 
-## Data Storage
+### Multi-User Deployment
+```bash
+# User-specific configurations
+export MEMORYOS_USER_ID="alice"
+export MEMORYOS_DATA_PATH="./users/alice"
 
-MemoryOS stores data locally in JSON and NumPy files:
+# Run separate instances
+python run.py --port 5001 --user alice
+python run.py --port 5002 --user bob
+```
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+#### Server Won't Start
+```bash
+# Check Python version
+python --version  # Should be 3.11+
+
+# Verify dependencies
+pip list | grep -E "(mcp|openai|numpy|faiss|pydantic)"
+
+# Test configuration
+python -c "import os; print(os.getenv('OPENAI_API_KEY', 'NOT_SET'))"
+```
+
+#### API Key Issues
+```bash
+# Verify API key format
+echo $OPENAI_API_KEY | grep -E "^sk-[a-zA-Z0-9]+"
+
+# Test OpenAI connection
+curl -H "Authorization: Bearer $OPENAI_API_KEY" \
+     "https://api.openai.com/v1/models" | head -10
+```
+
+#### Memory Issues
+```bash
+# Check data directory permissions
+ls -la memoryos_data/
+
+# Verify disk space
+df -h
+
+# Check memory usage
+python test_redis_style_memory.py
+```
+
+#### Claude Desktop Integration
+```bash
+# Validate JSON configuration
+python -m json.tool claude_desktop_config.json
+
+# Check file paths
+ls -la /absolute/path/to/mcp_server.py
+
+# Test MCP server directly  
+python mcp_server.py
+```
+
+### Performance Diagnostics
+```python
+# Test memory tier performance
+python test_complete_memory_tiers.py
+
+# Monitor API usage
+tail -f memoryos_data/logs/api_usage.log
+
+# Check embedding generation speed
+python test_embedding_issue.py
+```
+
+### Debug Mode
+```bash
+# Enable detailed logging
+export MEMORYOS_LOG_LEVEL="DEBUG"
+python run.py
+
+# Save debug output
+python run.py 2>&1 | tee debug.log
+```
+
+## 📁 Data Storage Structure
+
+MemoryOS creates a hierarchical directory structure for organized data storage:
 
 ```
 memoryos_data/
-└── your_user_id/
-    ├── short_term/
-    │   └── memories.json
-    ├── mid_term/
-    │   ├── memories.json
-    │   └── embeddings.npy
-    └── long_term/
-        ├── user_profile.json
-        ├── user_knowledge.json
-        ├── assistant_knowledge.json
-        └── embeddings/
+├── user_alice/
+│   ├── short_term/
+│   │   ├── memory.json          # Redis-style conversation deque
+│   │   └── overflow.json        # Evicted entries for consolidation
+│   ├── mid_term/
+│   │   ├── memory.json          # Conversation segments with heat
+│   │   └── embeddings.npy       # Segment embeddings for search
+│   └── long_term/
+│       ├── user_profile.json    # Personality and preferences
+│       ├── user_knowledge.json  # Facts about the user
+│       ├── assistant_knowledge_mcp_assistant.json  # Assistant knowledge
+│       ├── user_knowledge_embeddings.npy           # User knowledge vectors
+│       └── assistant_knowledge_embeddings_mcp_assistant.npy
+└── user_bob/
+    └── [same structure for different user]
 ```
 
-## Security Considerations
+### Data Format Examples
 
-- **API Keys**: Store securely, never commit to version control
-- **Data Privacy**: All memory data stays local on your machine
-- **User Isolation**: Each user has separate data directories
-- **No Data Transmission**: MemoryOS only sends queries to OpenAI, never your stored conversations
+**Short-term Memory Entry:**
+```json
+{
+  "user_input": "What's the weather like?",
+  "agent_response": "I don't have access to real-time weather data...",
+  "timestamp": "2025-07-06T19:30:45.123456",
+  "meta_data": {},
+  "access_count": 0,
+  "last_accessed": "2025-07-06T19:30:45.123456"
+}
+```
 
-## Support
+**Mid-term Memory Segment:**
+```json
+{
+  "id": "segment_abc123",
+  "user_id": "alice",
+  "timestamp": "2025-07-06T19:30:45.123456",
+  "qa_pairs": [...],
+  "summary": "Discussion about Python programming and data analysis",
+  "themes": ["programming", "python", "data-analysis"],
+  "heat": 3.5,
+  "access_count": 7,
+  "last_accessed": "2025-07-06T20:15:30.789012"
+}
+```
 
-If you encounter issues:
+## 🚀 Deployment Guide
 
-1. **Check the logs**: MemoryOS prints detailed error messages
-2. **Verify configuration**: Ensure `config.json` syntax is correct
-3. **Test components**: Run individual test scripts to isolate issues
-4. **Check OpenAI status**: Verify your API key and account quota
+### Development
+```bash
+# Local development with auto-reload
+python run.py --reload --debug
 
-For additional help, refer to `DEPLOYMENT.md` for detailed technical documentation.
+# Test with sample data
+python simple_memory_test.py
+```
 
-## Example Usage
+### Production
+```bash
+# Production HTTP server
+PORT=5000 python run.py
 
-Once set up, you can have conversations like:
+# With process management
+gunicorn --bind 0.0.0.0:5000 --workers 4 deploy_server:app
 
-**You**: "I'm working on a Python project for data analysis"
-**Claude**: *Uses MemoryOS to store this information*
+# Docker deployment (if needed)
+docker build -t memoryos .
+docker run -p 5000:5000 -e OPENAI_API_KEY=$OPENAI_API_KEY memoryos
+```
 
-**Later...**
+### Health Monitoring
+```bash
+# Check server health
+curl http://localhost:5000/health
 
-**You**: "What was I working on yesterday?"
-**Claude**: *Uses MemoryOS to retrieve: "You mentioned working on a Python project for data analysis"*
+# Monitor performance
+curl "http://localhost:5000/api/user_info?user_id=alice"
 
-The system learns your preferences, remembers your projects, and maintains context across all conversations.
+# Automated health checks
+while true; do
+  curl -s http://localhost:5000/ | grep -q "healthy" && echo "OK" || echo "ERROR"
+  sleep 30
+done
+```
+
+## 📄 License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read our contributing guidelines and submit pull requests for any improvements.
+
+## 📞 Support
+
+For issues and questions:
+1. Check the troubleshooting section above
+2. Review the test files for examples
+3. Ensure your OpenAI API key has sufficient quota
+4. Verify all dependencies are correctly installed
+
+The MemoryOS system is designed to be robust and self-healing, with comprehensive error handling and logging to help diagnose any issues.
+

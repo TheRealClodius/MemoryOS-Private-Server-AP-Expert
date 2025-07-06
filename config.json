@@ -1,6 +1,4 @@
 {
-  "user_id": "demo_user",
-
   "openai_base_url": "https://api.openai.com/v1",
   "data_storage_path": "./memoryos_data",
   "assistant_id": "mcp_assistant",

@@ -40,12 +40,36 @@ def load_config(config_path: str = "config.json") -> Dict[str, Any]:
         with open(config_path, 'r') as f:
             config = json.load(f)
         
-        # Override with environment variables if available
+        # Override with environment variables if available - with proper user ID handling
         if os.getenv("OPENAI_API_KEY"):
             config["openai_api_key"] = os.getenv("OPENAI_API_KEY")
         
         if os.getenv("OPENAI_BASE_URL"):
             config["openai_base_url"] = os.getenv("OPENAI_BASE_URL")
+        
+        # Dynamic user identification - allow override via environment
+        if os.getenv("MEMORYOS_USER_ID"):
+            config["user_id"] = os.getenv("MEMORYOS_USER_ID")
+        elif not config.get("user_id"):
+            # Generate a unique user ID if none provided
+            import uuid
+            config["user_id"] = f"user_{str(uuid.uuid4())[:8]}"
+        
+        # Dynamic assistant ID
+        if os.getenv("MEMORYOS_ASSISTANT_ID"):
+            config["assistant_id"] = os.getenv("MEMORYOS_ASSISTANT_ID")
+        elif not config.get("assistant_id"):
+            config["assistant_id"] = "memoryos_assistant"
+        
+        # Dynamic data storage path with user-specific directory
+        base_path = os.getenv("MEMORYOS_DATA_PATH", config.get("data_storage_path", "./memoryos_data"))
+        config["data_storage_path"] = f"{base_path}/{config['user_id']}"
+        
+        # Other environment overrides
+        if os.getenv("MEMORYOS_LLM_MODEL"):
+            config["llm_model"] = os.getenv("MEMORYOS_LLM_MODEL")
+        if os.getenv("MEMORYOS_EMBEDDING_MODEL"):
+            config["embedding_model"] = os.getenv("MEMORYOS_EMBEDDING_MODEL")
         
         # Validate required fields
         required_fields = ["user_id", "assistant_id", "llm_model", "embedding_model"]
@@ -266,7 +290,91 @@ async def get_user_profile_endpoint():
         return {
             "status": "success",
             "timestamp": datetime.now().isoformat(),
+            "user_id": server.user_id,
             "user_profile": profile
+        }
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+        )
+
+class CreateUserRequest(BaseModel):
+    user_id: Optional[str] = None
+    assistant_id: Optional[str] = None
+
+@app.post("/api/create_user")
+async def create_user_endpoint(request: CreateUserRequest):
+    """Create a new user (HTTP endpoint)"""
+    try:
+        # Generate user ID if not provided
+        if request.user_id:
+            user_id = request.user_id
+        else:
+            import uuid
+            user_id = f"user_{str(uuid.uuid4())[:8]}"
+        
+        assistant_id = request.assistant_id or "memoryos_assistant"
+        
+        # Create user-specific data path
+        base_path = os.getenv("MEMORYOS_DATA_PATH", "./memoryos_data")
+        user_data_path = f"{base_path}/{user_id}"
+        
+        # Initialize MemoryOS for the new user
+        user_config = {
+            "user_id": user_id,
+            "assistant_id": assistant_id,
+            "openai_api_key": os.getenv("OPENAI_API_KEY"),
+            "openai_base_url": os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+            "data_storage_path": user_data_path,
+            "short_term_capacity": 10,
+            "mid_term_capacity": 2000,
+            "long_term_knowledge_capacity": 100,
+            "retrieval_queue_capacity": 7,
+            "mid_term_heat_threshold": 5.0,
+            "llm_model": "gpt-4o-mini",
+            "embedding_model": "text-embedding-3-small"
+        }
+        
+        # Test initialization
+        test_server = init_memoryos(user_config)
+        
+        return {
+            "status": "success",
+            "message": "User created successfully",
+            "user_id": user_id,
+            "assistant_id": assistant_id,
+            "data_path": user_data_path,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+        )
+
+@app.get("/api/user_info")
+async def get_user_info_endpoint():
+    """Get current user information"""
+    try:
+        server = await init_server()
+        stats = server.get_memory_stats()
+        
+        return {
+            "status": "success",
+            "user_id": server.user_id,
+            "assistant_id": server.assistant_id,
+            "data_path": server.data_storage_path,
+            "memory_stats": stats,
+            "timestamp": datetime.now().isoformat()
         }
     except Exception as e:
         return JSONResponse(

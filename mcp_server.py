@@ -105,10 +105,20 @@ def load_config(config_path: str = "config.json") -> Dict[str, Any]:
             print(f"Warning: Could not load config file {config_path}: {e}", file=sys.stderr)
     
     # Environment variable fallbacks with defaults
-    config.setdefault("user_id", os.getenv("MEMORYOS_USER_ID", "default_user"))
+    # Dynamic user ID generation if not provided
+    if not config.get("user_id") and not os.getenv("MEMORYOS_USER_ID"):
+        import uuid
+        config["user_id"] = f"user_{str(uuid.uuid4())[:8]}"
+    else:
+        config.setdefault("user_id", os.getenv("MEMORYOS_USER_ID", "default_user"))
+    
     config.setdefault("openai_api_key", os.getenv("OPENAI_API_KEY", ""))
     config.setdefault("openai_base_url", os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"))
-    config.setdefault("data_storage_path", os.getenv("MEMORYOS_DATA_PATH", "./memoryos_data"))
+    
+    # User-specific data storage path
+    base_path = os.getenv("MEMORYOS_DATA_PATH", "./memoryos_data")
+    config.setdefault("data_storage_path", f"{base_path}/{config['user_id']}")
+    
     config.setdefault("assistant_id", os.getenv("MEMORYOS_ASSISTANT_ID", "mcp_assistant"))
     config.setdefault("llm_model", os.getenv("MEMORYOS_LLM_MODEL", "gpt-4o-mini"))
     config.setdefault("embedding_model", os.getenv("MEMORYOS_EMBEDDING_MODEL", "text-embedding-3-small"))

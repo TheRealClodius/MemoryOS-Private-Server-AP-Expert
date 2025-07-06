@@ -79,6 +79,21 @@ The system follows a modular, layered architecture with clear separation of conc
 
 ## Recent Changes
 
+✅ **July 06, 2025 - SIMILARITY THRESHOLD FILTERING FIX**
+- **RELEVANCE ISSUE RESOLVED**: Fixed memory retrieval returning irrelevant results
+- **Problem**: System returned any matches regardless of relevance (threshold: 0.3)
+- **Solution**: Implemented proper similarity filtering with 0.7 threshold across all memory layers
+- **Filtering Improvements**:
+  - Short-term memory: Word overlap similarity with 0.7 threshold
+  - Mid-term memory: Embedding similarity threshold increased from 0.3 to 0.7
+  - Long-term knowledge: User/assistant knowledge threshold increased to 0.7
+  - Empty results returned when no matches meet relevance threshold
+- **VERIFIED WORKING**: 
+  - Relevant query "favorite color" returns matching memory (score: 1.5)
+  - Irrelevant query "weather today" returns empty results
+  - Partial match "blue sky" properly filtered out
+- **Behavior**: Only highly relevant memories returned, improving user experience
+
 ✅ **July 06, 2025 - CRITICAL SECURITY FIX: User Data Isolation Vulnerability**
 - **SECURITY VULNERABILITY RESOLVED**: Fixed major data leakage issue in API endpoints
 - **Problem**: Server was using single global MemoryOS instance, causing cross-user data exposure

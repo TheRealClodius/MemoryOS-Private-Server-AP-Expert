@@ -1,16 +1,25 @@
 """
 Short-term memory management for MemoryOS
+Redis-style in-memory storage with simple file persistence
 """
 
 import json
 import os
+from collections import deque
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
-from .utils import get_timestamp, safe_json_save, safe_json_load, ensure_directory_exists
+from .utils import get_timestamp, ensure_directory_exists
 
 
 class ShortTermMemory:
-    """Manages short-term memory storage and retrieval"""
+    """
+    Manages short-term memory storage and retrieval using Redis-style in-memory storage
+    
+    This implementation uses a deque for Redis-like performance:
+    - Fast insertion and retrieval (O(1))
+    - Automatic capacity management with FIFO eviction
+    - Simple JSON persistence for recovery
+    """
     
     def __init__(self, user_id: str, data_path: str, capacity: int = 10):
         """
@@ -27,15 +36,39 @@ class ShortTermMemory:
         ensure_directory_exists(self.data_path)
         
         self.memory_file = os.path.join(self.data_path, "memory.json")
-        self.memory: List[Dict[str, Any]] = self._load_memory()
+        # Use deque for Redis-like performance with maxlen for automatic eviction
+        self.memory = deque(maxlen=capacity)
+        self._load_memory()
     
-    def _load_memory(self) -> List[Dict[str, Any]]:
-        """Load memory from file"""
-        return safe_json_load(self.memory_file, [])
+    def _load_memory(self) -> None:
+        """Load memory from file into deque"""
+        try:
+            with open(self.memory_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    self.memory = deque(data, maxlen=self.capacity)
+                else:
+                    self.memory = deque(maxlen=self.capacity)
+                print(f"ShortTermMemory: Loaded {len(self.memory)} entries from {self.memory_file}")
+        except FileNotFoundError:
+            self.memory = deque(maxlen=self.capacity)
+            print(f"ShortTermMemory: No history file found. Initializing new memory.")
+        except json.JSONDecodeError:
+            self.memory = deque(maxlen=self.capacity)
+            print(f"ShortTermMemory: Error decoding JSON. Initializing new memory.")
+        except Exception as e:
+            self.memory = deque(maxlen=self.capacity)
+            print(f"ShortTermMemory: Error loading memory: {e}. Initializing new memory.")
     
     def _save_memory(self) -> bool:
         """Save memory to file"""
-        return safe_json_save(self.memory, self.memory_file)
+        try:
+            with open(self.memory_file, "w", encoding="utf-8") as f:
+                json.dump(list(self.memory), f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            print(f"Error saving ShortTermMemory to {self.memory_file}: {e}")
+            return False
     
     def add_qa_pair(
         self, 
@@ -68,13 +101,21 @@ class ShortTermMemory:
             "last_accessed": timestamp
         }
         
-        # Add to memory
-        self.memory.append(qa_pair)
+        # Check if we need to handle overflow before adding
+        evicted_entry = None
+        if len(self.memory) >= self.capacity:
+            # deque will automatically evict the oldest when we append
+            # but we need to capture it first for overflow processing
+            if len(self.memory) == self.capacity:
+                evicted_entry = self.memory[0]  # Get the oldest entry
         
-        # Maintain capacity limit
-        if len(self.memory) > self.capacity:
-            removed = self.memory.pop(0)  # Remove oldest
-            self._handle_overflow(removed)
+        # Add to memory (deque handles capacity automatically)
+        self.memory.append(qa_pair)
+        print(f"ShortTermMemory: Added QA. User: {user_input[:30]}...")
+        
+        # Handle overflow if an entry was evicted
+        if evicted_entry:
+            self._handle_overflow(evicted_entry)
         
         self._save_memory()
         return qa_pair
@@ -87,14 +128,28 @@ class ShortTermMemory:
             removed_entry: The memory entry that was removed due to capacity limit
         """
         overflow_file = os.path.join(self.data_path, "overflow.json")
-        overflow_memory = safe_json_load(overflow_file, [])
+        try:
+            with open(overflow_file, "r", encoding="utf-8") as f:
+                overflow_memory = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            overflow_memory = []
+        
         overflow_memory.append(removed_entry)
-        safe_json_save(overflow_memory, overflow_file)
+        
+        try:
+            with open(overflow_file, "w", encoding="utf-8") as f:
+                json.dump(overflow_memory, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Error saving overflow: {e}")
     
     def get_overflow_entries(self) -> List[Dict[str, Any]]:
         """Get all overflow entries for consolidation"""
         overflow_file = os.path.join(self.data_path, "overflow.json")
-        return safe_json_load(overflow_file, [])
+        try:
+            with open(overflow_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return []
     
     def clear_overflow(self) -> bool:
         """Clear overflow entries after consolidation"""
@@ -109,7 +164,7 @@ class ShortTermMemory:
     
     def get_all(self) -> List[Dict[str, Any]]:
         """Get all short-term memory entries"""
-        return self.memory.copy()
+        return list(self.memory)
     
     def get_recent(self, count: int = 5) -> List[Dict[str, Any]]:
         """
@@ -121,7 +176,14 @@ class ShortTermMemory:
         Returns:
             List of recent memory entries
         """
-        return self.memory[-count:] if count <= len(self.memory) else self.memory.copy()
+        if count <= 0:
+            return []
+        
+        memory_list = list(self.memory)
+        if count >= len(memory_list):
+            return memory_list
+        else:
+            return memory_list[-count:]
     
     def search_by_keyword(self, keyword: str) -> List[Dict[str, Any]]:
         """
@@ -136,7 +198,10 @@ class ShortTermMemory:
         keyword_lower = keyword.lower()
         results = []
         
-        for entry in self.memory:
+        # Convert deque to list for easier processing
+        memory_list = list(self.memory)
+        
+        for i, entry in enumerate(memory_list):
             user_input = entry.get("user_input", "").lower()
             agent_response = entry.get("agent_response", "").lower()
             
@@ -164,7 +229,10 @@ class ShortTermMemory:
         cutoff_time = datetime.now() - timedelta(hours=hours)
         results = []
         
-        for entry in self.memory:
+        # Convert deque to list for processing
+        memory_list = list(self.memory)
+        
+        for entry in memory_list:
             try:
                 entry_time = datetime.fromisoformat(entry["timestamp"].replace('Z', '+00:00'))
                 if entry_time >= cutoff_time:
@@ -230,11 +298,15 @@ class ShortTermMemory:
             overflow_file = os.path.join(self.data_path, "cleared_backup.json")
             backup_data = {
                 "cleared_at": get_timestamp(),
-                "entries": self.memory.copy()
+                "entries": list(self.memory)
             }
-            safe_json_save(backup_data, overflow_file)
+            try:
+                with open(overflow_file, "w", encoding="utf-8") as f:
+                    json.dump(backup_data, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                print(f"Error saving backup: {e}")
         
-        self.memory = []
+        self.memory.clear()
         return self._save_memory()
     
     def get_context_for_query(self, query: str, max_entries: int = 5) -> List[Dict[str, Any]]:
@@ -252,7 +324,10 @@ class ShortTermMemory:
         query_words = set(query.lower().split())
         scored_entries = []
         
-        for entry in self.memory:
+        # Convert deque to list for processing
+        memory_list = list(self.memory)
+        
+        for entry in memory_list:
             score = 0
             
             # Score based on keyword matches
@@ -277,7 +352,25 @@ class ShortTermMemory:
         return {
             "user_id": self.user_id,
             "export_timestamp": get_timestamp(),
-            "current_memory": self.memory.copy(),
+            "current_memory": list(self.memory),
             "overflow_memory": self.get_overflow_entries(),
             "stats": self.get_memory_stats()
         }
+    
+    def pop_oldest(self) -> Optional[Dict[str, Any]]:
+        """
+        Pop the oldest entry from memory (Redis-style FIFO operation)
+        
+        Returns:
+            The oldest memory entry if available, None otherwise
+        """
+        if self.memory:
+            oldest_entry = self.memory.popleft()
+            print("ShortTermMemory: Evicted oldest QA pair.")
+            self._save_memory()
+            return oldest_entry
+        return None
+    
+    def is_empty(self) -> bool:
+        """Check if short-term memory is empty"""
+        return len(self.memory) == 0

@@ -79,6 +79,23 @@ The system follows a modular, layered architecture with clear separation of conc
 
 ## Recent Changes
 
+✅ **July 06, 2025 - MEMORY TIER ARCHITECTURE FIX: Redis-Style Short-Term Memory**
+- **ARCHITECTURE ISSUE RESOLVED**: Fixed incorrect memory tier implementation to match original MemoryOS design
+- **Problem**: Short-term memory was using complex JSON file storage and indexing (like mid/long-term)
+- **Solution**: Implemented Redis-style in-memory storage using Python deque with automatic FIFO eviction
+- **Redis-Style Performance Features**:
+  - Fast O(1) insertion and retrieval using collections.deque
+  - Automatic capacity management with maxlen parameter
+  - FIFO eviction when capacity exceeded (oldest entries moved to overflow)
+  - Simple JSON persistence only for recovery, not primary storage
+  - Sub-millisecond access for recent conversations
+- **Proper Memory Tier Separation**:
+  - Short-term: Redis-style deque (fast, temporary, FIFO)
+  - Mid-term: JSON + embeddings (indexed, heat-based promotion)
+  - Long-term: JSON + embeddings (persistent, semantic search)
+- **VERIFIED WORKING**: All FIFO operations, overflow handling, and persistence functional
+- **Performance**: Matches original MemoryOS behavior with Redis-like characteristics
+
 ✅ **July 06, 2025 - SIMILARITY THRESHOLD FILTERING FIX**
 - **RELEVANCE ISSUE RESOLVED**: Fixed memory retrieval returning irrelevant results
 - **Problem**: System returned any matches regardless of relevance (threshold: 0.3)

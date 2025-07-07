@@ -445,10 +445,11 @@ class StreamableHTTPMCPServer:
                         "properties": {
                             "user_input": {"type": "string", "description": "The user's input or question"},
                             "agent_response": {"type": "string", "description": "The agent's response"},
-                            "memory_type": {"type": "string", "enum": ["conversation", "user_knowledge", "assistant_knowledge"], "default": "conversation"},
-                            "tags": {"type": "array", "items": {"type": "string"}, "description": "Optional tags"}
+                            "user_id": {"type": "string", "description": "The user identifier for memory isolation (required)"},
+                            "timestamp": {"type": "string", "description": "Optional timestamp in ISO format"},
+                            "meta_data": {"type": "object", "description": "Optional metadata dictionary"}
                         },
-                        "required": ["user_input", "agent_response"]
+                        "required": ["user_input", "agent_response", "user_id"]
                     }
                 ),
                 Tool(
@@ -458,10 +459,12 @@ class StreamableHTTPMCPServer:
                         "type": "object",
                         "properties": {
                             "query": {"type": "string", "description": "Search query"},
-                            "memory_type": {"type": "string", "enum": ["conversation", "user_knowledge", "assistant_knowledge"], "description": "Filter by memory type"},
+                            "user_id": {"type": "string", "description": "The user identifier for memory isolation (required)"},
+                            "relationship_with_user": {"type": "string", "description": "Relationship context (assistant, friend, colleague, etc.)", "default": "assistant"},
+                            "style_hint": {"type": "string", "description": "Style preference for response formatting", "default": ""},
                             "max_results": {"type": "integer", "default": 10, "description": "Maximum number of results"}
                         },
-                        "required": ["query"]
+                        "required": ["query", "user_id"]
                     }
                 ),
                 Tool(
@@ -470,8 +473,11 @@ class StreamableHTTPMCPServer:
                     inputSchema={
                         "type": "object",
                         "properties": {
-                            "user_id": {"type": "string", "description": "User identifier", "default": "default"}
-                        }
+                            "user_id": {"type": "string", "description": "The user identifier for profile retrieval (required)"},
+                            "include_knowledge": {"type": "boolean", "description": "Whether to include user knowledge entries", "default": True},
+                            "include_assistant_knowledge": {"type": "boolean", "description": "Whether to include assistant knowledge entries", "default": False}
+                        },
+                        "required": ["user_id"]
                     }
                 )
             ]
@@ -480,25 +486,30 @@ class StreamableHTTPMCPServer:
         async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             try:
                 if name == "add_memory":
-                    result = await add_memory_handler(
-                        arguments.get("user_input", ""),
-                        arguments.get("agent_response", ""),
-                        arguments.get("memory_type", "conversation"),
-                        arguments.get("tags", [])
+                    result = await add_memory(
+                        user_input=arguments.get("user_input", ""),
+                        agent_response=arguments.get("agent_response", ""),
+                        user_id=arguments.get("user_id", ""),
+                        timestamp=arguments.get("timestamp"),
+                        meta_data=arguments.get("meta_data")
                     )
                     return [TextContent(type="text", text=json.dumps(result.dict()))]
                 
                 elif name == "retrieve_memory":
-                    result = await retrieve_memory_handler(
-                        arguments.get("query", ""),
-                        arguments.get("memory_type"),
-                        arguments.get("max_results", 10)
+                    result = await retrieve_memory(
+                        query=arguments.get("query", ""),
+                        user_id=arguments.get("user_id", ""),
+                        relationship_with_user=arguments.get("relationship_with_user", "assistant"),
+                        style_hint=arguments.get("style_hint", ""),
+                        max_results=arguments.get("max_results", 10)
                     )
                     return [TextContent(type="text", text=json.dumps(result.dict()))]
                 
                 elif name == "get_user_profile":
-                    result = await get_user_profile_handler(
-                        arguments.get("user_id", "default")
+                    result = await get_user_profile(
+                        user_id=arguments.get("user_id", ""),
+                        include_knowledge=arguments.get("include_knowledge", True),
+                        include_assistant_knowledge=arguments.get("include_assistant_knowledge", False)
                     )
                     return [TextContent(type="text", text=json.dumps(result.dict()))]
                 
@@ -509,173 +520,7 @@ class StreamableHTTPMCPServer:
                 print(f"Error in call_tool: {e}", file=sys.stderr)
                 raise McpError(f"Tool execution failed: {str(e)}")
 
-# Handler functions for StreamableHTTP MCP server with user isolation
-async def add_memory_handler(
-    user_input: str,
-    agent_response: str,
-    memory_type: str = "conversation",
-    tags: List[str] = None
-) -> MemoryOperationResult:
-    """Add memory handler with user isolation"""
-    try:
-        # Get user ID from current session
-        if not streamable_server.current_session_id:
-            raise ValueError("No active session")
-        
-        user_id = get_user_id_from_session(streamable_server.current_session_id)
-        memoryos_instance = get_memoryos_for_user(user_id)
-        
-        # Add memory to user's specific instance
-        result = memoryos_instance.add_memory(
-            user_input=user_input,
-            agent_response=agent_response,
-            timestamp=datetime.now().isoformat(),
-            meta_data={"type": memory_type, "tags": tags or []}
-        )
-        
-        if result.get("status") == "success":
-            return MemoryOperationResult(
-                status="success",
-                message=f"Memory added successfully for user {user_id}",
-                timestamp=datetime.now().isoformat(),
-                details={"user_id": user_id, "memory_type": memory_type}
-            )
-        else:
-            return MemoryOperationResult(
-                status="error",
-                message=result.get("message", "Unknown error"),
-                timestamp=datetime.now().isoformat()
-            )
-    
-    except Exception as e:
-        return MemoryOperationResult(
-            status="error",
-            message=f"Error adding memory: {str(e)}",
-            timestamp=datetime.now().isoformat()
-        )
-
-async def retrieve_memory_handler(
-    query: str,
-    memory_type: Optional[str] = None,
-    max_results: int = 10
-) -> MemoryRetrievalResult:
-    """Retrieve memory handler with user isolation"""
-    try:
-        # Get user ID from current session
-        if not streamable_server.current_session_id:
-            raise ValueError("No active session")
-        
-        user_id = get_user_id_from_session(streamable_server.current_session_id)
-        memoryos_instance = get_memoryos_for_user(user_id)
-        
-        # Generate embedding for the query
-        query_embedding = memoryos_instance._generate_embedding(query)
-        
-        # Retrieve context from user's specific instance
-        retrieval_results = memoryos_instance.retriever.retrieve_context(
-            user_query=query,
-            user_id=user_id,
-            query_embedding=query_embedding
-        )
-        
-        # Get user profile
-        user_profile = memoryos_instance.get_user_profile_summary()
-        
-        # Format results
-        short_term_entries = []
-        for entry in retrieval_results.get("short_term_memory", []):
-            short_term_entries.append(MemoryEntry(
-                user_input=entry.get("user_input", ""),
-                agent_response=entry.get("agent_response", ""),
-                timestamp=entry.get("timestamp", ""),
-                meta_info=entry.get("meta_data", {})
-            ))
-        
-        retrieved_pages = []
-        for page in retrieval_results.get("retrieved_pages", [])[:max_results]:
-            retrieved_pages.append(MemoryEntry(
-                user_input=page.get("user_input", ""),
-                agent_response=page.get("agent_response", ""),
-                timestamp=page.get("timestamp", ""),
-                meta_info=page.get("meta_info", {})
-            ))
-        
-        user_knowledge = []
-        for knowledge in retrieval_results.get("retrieved_user_knowledge", [])[:max_results]:
-            user_knowledge.append(KnowledgeEntry(
-                knowledge=knowledge.get("knowledge", ""),
-                timestamp=knowledge.get("timestamp", ""),
-                source=knowledge.get("source"),
-                confidence=knowledge.get("confidence"),
-                similarity_score=knowledge.get("similarity_score")
-            ))
-        
-        assistant_knowledge = []
-        for knowledge in retrieval_results.get("retrieved_assistant_knowledge", [])[:max_results]:
-            assistant_knowledge.append(KnowledgeEntry(
-                knowledge=knowledge.get("knowledge", ""),
-                timestamp=knowledge.get("timestamp", ""),
-                source=knowledge.get("source"),
-                confidence=knowledge.get("confidence"),
-                similarity_score=knowledge.get("similarity_score")
-            ))
-        
-        return MemoryRetrievalResult(
-            status="success",
-            query=query,
-            timestamp=datetime.now().isoformat(),
-            user_profile=user_profile,
-            short_term_memory=short_term_entries,
-            short_term_count=len(short_term_entries),
-            retrieved_pages=retrieved_pages,
-            retrieved_user_knowledge=user_knowledge,
-            retrieved_assistant_knowledge=assistant_knowledge
-        )
-    
-    except Exception as e:
-        return MemoryRetrievalResult(
-            status="error",
-            query=query,
-            timestamp=datetime.now().isoformat(),
-            user_profile=f"Error: {str(e)}",
-            short_term_memory=[],
-            short_term_count=0,
-            retrieved_pages=[],
-            retrieved_user_knowledge=[],
-            retrieved_assistant_knowledge=[]
-        )
-
-async def get_user_profile_handler(user_id: str = "default") -> UserProfileResult:
-    """Get user profile handler with user isolation"""
-    try:
-        # Get user ID from current session (override parameter)
-        if not streamable_server.current_session_id:
-            raise ValueError("No active session")
-        
-        session_user_id = get_user_id_from_session(streamable_server.current_session_id)
-        memoryos_instance = get_memoryos_for_user(session_user_id)
-        
-        # Get profile for the session user only
-        user_profile = memoryos_instance.get_user_profile_summary()
-        if not user_profile or user_profile.lower() == "none":
-            user_profile = "No detailed user profile available yet"
-        
-        return UserProfileResult(
-            status="success",
-            timestamp=datetime.now().isoformat(),
-            user_id=session_user_id,
-            assistant_id=memoryos_instance.assistant_id,
-            user_profile=user_profile
-        )
-    
-    except Exception as e:
-        return UserProfileResult(
-            status="error",
-            timestamp=datetime.now().isoformat(),
-            user_id="unknown",
-            assistant_id="unknown",
-            user_profile=f"Error: {str(e)}"
-        )
+# Handler functions removed - now using direct tool functions with user_id parameter
 
 # Initialize StreamableHTTP server
 streamable_server = StreamableHTTPMCPServer()
@@ -904,6 +749,7 @@ async def main():
 async def add_memory(
     user_input: str,
     agent_response: str,
+    user_id: str,
     timestamp: Optional[str] = None,
     meta_data: Optional[Dict[str, Any]] = None
 ) -> MemoryOperationResult:
@@ -916,6 +762,7 @@ async def add_memory(
     Args:
         user_input: The user's input, question, or statement
         agent_response: The assistant's response to the user input
+        user_id: The user identifier for memory isolation (required)
         timestamp: Optional timestamp in ISO format (uses current time if not provided)
         meta_data: Optional metadata dictionary for additional context
     
@@ -923,16 +770,16 @@ async def add_memory(
         MemoryOperationResult with operation status and details
     """
     try:
-        # Get user ID from current session - ensures isolation
-        if not streamable_server.current_session_id:
+        # Validate user_id
+        if not user_id or not user_id.strip():
             return MemoryOperationResult(
                 status="error",
-                message="No active session. User isolation requires session context.",
+                message="user_id is required and cannot be empty",
                 timestamp=datetime.now().isoformat()
             )
         
-        user_id = get_user_id_from_session(streamable_server.current_session_id)
-        memoryos_instance = get_memoryos_for_user(user_id)
+        # Get user-specific MemoryOS instance
+        memoryos_instance = get_memoryos_for_user(user_id.strip())
         
         # Validate inputs
         if not user_input or not user_input.strip():
@@ -987,6 +834,7 @@ async def add_memory(
 @mcp.tool()
 async def retrieve_memory(
     query: str,
+    user_id: str,
     relationship_with_user: str = "assistant",
     style_hint: str = "",
     max_results: int = 10
@@ -999,6 +847,7 @@ async def retrieve_memory(
     
     Args:
         query: The search query or topic to find relevant memories for
+        user_id: The user identifier for memory isolation (required)
         relationship_with_user: Relationship context (assistant, friend, colleague, etc.)
         style_hint: Style preference for response formatting
         max_results: Maximum number of results to return per category (default: 10)
@@ -1007,13 +856,13 @@ async def retrieve_memory(
         MemoryRetrievalResult with comprehensive memory context
     """
     try:
-        # Get user ID from current session - ensures isolation
-        if not streamable_server.current_session_id:
+        # Validate user_id
+        if not user_id or not user_id.strip():
             return MemoryRetrievalResult(
                 status="error",
                 query=query,
                 timestamp=datetime.now().isoformat(),
-                user_profile="No active session - user isolation required",
+                user_profile="user_id is required and cannot be empty",
                 short_term_memory=[],
                 short_term_count=0,
                 retrieved_pages=[],
@@ -1021,8 +870,8 @@ async def retrieve_memory(
                 retrieved_assistant_knowledge=[]
             )
         
-        user_id = get_user_id_from_session(streamable_server.current_session_id)
-        memoryos_instance = get_memoryos_for_user(user_id)
+        # Get user-specific MemoryOS instance
+        memoryos_instance = get_memoryos_for_user(user_id.strip())
         
         # Validate query
         if not query or not query.strip():
@@ -1127,6 +976,7 @@ async def retrieve_memory(
 
 @mcp.tool()
 async def get_user_profile(
+    user_id: str,
     include_knowledge: bool = True,
     include_assistant_knowledge: bool = False
 ) -> UserProfileResult:
@@ -1137,6 +987,7 @@ async def get_user_profile(
     preferences, and optionally associated knowledge entries.
     
     Args:
+        user_id: The user identifier for profile retrieval (required)
         include_knowledge: Whether to include user knowledge entries in the response
         include_assistant_knowledge: Whether to include assistant knowledge entries
     
@@ -1144,18 +995,18 @@ async def get_user_profile(
         UserProfileResult with user profile and optional knowledge entries
     """
     try:
-        # Get user ID from current session - ensures isolation
-        if not streamable_server.current_session_id:
+        # Validate user_id
+        if not user_id or not user_id.strip():
             return UserProfileResult(
                 status="error",
                 timestamp=datetime.now().isoformat(),
                 user_id="unknown",
                 assistant_id="unknown",
-                user_profile="No active session - user isolation required."
+                user_profile="user_id is required and cannot be empty"
             )
         
-        user_id = get_user_id_from_session(streamable_server.current_session_id)
-        memoryos_instance = get_memoryos_for_user(user_id)
+        # Get user-specific MemoryOS instance
+        memoryos_instance = get_memoryos_for_user(user_id.strip())
         
         # Get user profile and knowledge
         # Get user profile summary
@@ -1209,8 +1060,8 @@ async def get_user_profile(
         return UserProfileResult(
             status="error",
             timestamp=datetime.now().isoformat(),
-            user_id=memoryos_instance.user_id if memoryos_instance else "unknown",
-            assistant_id=memoryos_instance.assistant_id if memoryos_instance else "unknown",
+            user_id=user_id.strip() if user_id else "unknown",
+            assistant_id="unknown",
             user_profile=f"Error retrieving user profile: {str(e)}"
         )
 

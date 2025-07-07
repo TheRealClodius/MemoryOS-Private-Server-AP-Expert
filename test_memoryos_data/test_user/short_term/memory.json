@@ -1,0 +1,18 @@
+[
+  {
+    "user_input": "What is machine learning?",
+    "agent_response": "ML is a subset of AI that learns from data.",
+    "timestamp": "2025-07-06T19:47:48.954315",
+    "meta_data": {},
+    "access_count": 1,
+    "last_accessed": "2025-07-06T19:47:48.962337"
+  },
+  {
+    "user_input": "What is deep learning?",
+    "agent_response": "Deep learning uses neural networks.",
+    "timestamp": "2025-07-06T19:47:48.957034",
+    "meta_data": {},
+    "access_count": 1,
+    "last_accessed": "2025-07-06T19:47:48.962346"
+  }
+]

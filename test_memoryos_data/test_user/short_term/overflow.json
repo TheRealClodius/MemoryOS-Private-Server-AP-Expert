@@ -1,0 +1,18 @@
+[
+  {
+    "user_input": "What is Python?",
+    "agent_response": "Python is a programming language.",
+    "timestamp": "2025-07-06T19:47:48.950964",
+    "meta_data": {},
+    "access_count": 0,
+    "last_accessed": "2025-07-06T19:47:48.950964"
+  },
+  {
+    "user_input": "How do I learn coding?",
+    "agent_response": "Start with the basics and practice regularly.",
+    "timestamp": "2025-07-06T19:47:48.951778",
+    "meta_data": {},
+    "access_count": 0,
+    "last_accessed": "2025-07-06T19:47:48.951778"
+  }
+]

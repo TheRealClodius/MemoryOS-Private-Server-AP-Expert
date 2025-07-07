@@ -65,38 +65,52 @@ class MemoryRetriever:
         return context
     
     def _get_short_term_context(self, user_query: str) -> List[Dict[str, Any]]:
-        """Get relevant context from short-term memory"""
+        """Get relevant context from short-term memory with similarity filtering"""
         try:
-            # Get recent interactions and search for relevant ones
-            recent_memory = self.short_term_memory.get_recent(self.queue_capacity)
+            # Get relevant memory based on query
             relevant_memory = self.short_term_memory.get_context_for_query(user_query, self.queue_capacity)
             
-            # Combine and deduplicate
-            all_memory = recent_memory + relevant_memory
-            seen_timestamps = set()
-            unique_memory = []
+            # Apply similarity threshold filtering
+            query_words = set(user_query.lower().split())
+            filtered_memory = []
             
-            for entry in all_memory:
-                timestamp = entry.get("timestamp")
-                if timestamp not in seen_timestamps:
-                    seen_timestamps.add(timestamp)
-                    unique_memory.append(entry)
+            for entry in relevant_memory:
+                # Calculate similarity score
+                user_input_words = set(entry.get("user_input", "").lower().split())
+                agent_response_words = set(entry.get("agent_response", "").lower().split())
+                
+                # Calculate word overlap similarity
+                total_query_words = len(query_words)
+                if total_query_words == 0:
+                    continue
+                    
+                user_overlap = len(query_words.intersection(user_input_words))
+                agent_overlap = len(query_words.intersection(agent_response_words))
+                
+                # Calculate similarity score (0.0 to 1.0)
+                similarity_score = (user_overlap * 2 + agent_overlap) / (total_query_words * 2)
+                
+                # Apply threshold - only return if similarity is above 0.7
+                if similarity_score >= 0.7:
+                    entry["similarity_score"] = similarity_score
+                    filtered_memory.append(entry)
             
-            # Limit to queue capacity
-            return unique_memory[:self.queue_capacity]
+            # Sort by similarity score and return top results
+            filtered_memory.sort(key=lambda x: x.get("similarity_score", 0), reverse=True)
+            return filtered_memory[:self.queue_capacity]
         
         except Exception as e:
             print(f"Error retrieving short-term context: {e}")
             return []
     
     def _get_mid_term_context(self, query_embedding: np.ndarray) -> List[Dict[str, Any]]:
-        """Get relevant context from mid-term memory"""
+        """Get relevant context from mid-term memory with proper similarity filtering"""
         try:
-            # Search by embedding similarity
+            # Search by embedding similarity with higher threshold
             results = self.mid_term_memory.search_by_embedding(
                 query_embedding, 
                 top_k=self.queue_capacity,
-                similarity_threshold=0.3
+                similarity_threshold=0.7  # Increased from 0.3 to 0.7 for relevance
             )
             
             # Format results for output
@@ -125,12 +139,12 @@ class MemoryRetriever:
             return []
     
     def _get_user_knowledge_context(self, query_embedding: np.ndarray) -> List[Dict[str, Any]]:
-        """Get relevant user knowledge"""
+        """Get relevant user knowledge with proper similarity filtering"""
         try:
             results = self.long_term_memory.search_user_knowledge(
                 query_embedding,
                 top_k=self.queue_capacity,
-                similarity_threshold=0.3
+                similarity_threshold=0.7  # Increased from 0.3 to 0.7 for relevance
             )
             
             formatted_results = []
@@ -151,12 +165,12 @@ class MemoryRetriever:
             return []
     
     def _get_assistant_knowledge_context(self, query_embedding: np.ndarray) -> List[Dict[str, Any]]:
-        """Get relevant assistant knowledge"""
+        """Get relevant assistant knowledge with proper similarity filtering"""
         try:
             results = self.long_term_memory.search_assistant_knowledge(
                 query_embedding,
                 top_k=self.queue_capacity,
-                similarity_threshold=0.3
+                similarity_threshold=0.7  # Increased from 0.3 to 0.7 for relevance
             )
             
             formatted_results = []

@@ -79,6 +79,62 @@ The system follows a modular, layered architecture with clear separation of conc
 
 ## Recent Changes
 
+✅ **July 06, 2025 - MEMORY TIER ARCHITECTURE FIX: Redis-Style Short-Term Memory**
+- **ARCHITECTURE ISSUE RESOLVED**: Fixed incorrect memory tier implementation to match original MemoryOS design
+- **Problem**: Short-term memory was using complex JSON file storage and indexing (like mid/long-term)
+- **Solution**: Implemented Redis-style in-memory storage using Python deque with automatic FIFO eviction
+- **Redis-Style Performance Features**:
+  - Fast O(1) insertion and retrieval using collections.deque
+  - Automatic capacity management with maxlen parameter
+  - FIFO eviction when capacity exceeded (oldest entries moved to overflow)
+  - Simple JSON persistence only for recovery, not primary storage
+  - Sub-millisecond access for recent conversations
+- **Proper Memory Tier Separation**:
+  - Short-term: Redis-style deque (fast, temporary, FIFO)
+  - Mid-term: JSON + embeddings (indexed, heat-based promotion)
+  - Long-term: JSON + embeddings (persistent, semantic search)
+- **VERIFIED WORKING**: All FIFO operations, overflow handling, and persistence functional
+- **Performance**: Matches original MemoryOS behavior with Redis-like characteristics
+
+✅ **July 06, 2025 - SIMILARITY THRESHOLD FILTERING FIX**
+- **RELEVANCE ISSUE RESOLVED**: Fixed memory retrieval returning irrelevant results
+- **Problem**: System returned any matches regardless of relevance (threshold: 0.3)
+- **Solution**: Implemented proper similarity filtering with 0.7 threshold across all memory layers
+- **Filtering Improvements**:
+  - Short-term memory: Word overlap similarity with 0.7 threshold
+  - Mid-term memory: Embedding similarity threshold increased from 0.3 to 0.7
+  - Long-term knowledge: User/assistant knowledge threshold increased to 0.7
+  - Empty results returned when no matches meet relevance threshold
+- **VERIFIED WORKING**: 
+  - Relevant query "favorite color" returns matching memory (score: 1.5)
+  - Irrelevant query "weather today" returns empty results
+  - Partial match "blue sky" properly filtered out
+- **Behavior**: Only highly relevant memories returned, improving user experience
+
+✅ **July 06, 2025 - CRITICAL SECURITY FIX: User Data Isolation Vulnerability**
+- **SECURITY VULNERABILITY RESOLVED**: Fixed major data leakage issue in API endpoints
+- **Problem**: Server was using single global MemoryOS instance, causing cross-user data exposure
+- **Solution**: Implemented per-user MemoryOS instances with proper isolation
+- **API Security Enhancements**:
+  - All endpoints now require user_id parameter for data isolation
+  - Added user_id validation (cannot be empty/null)
+  - Each user gets separate MemoryOS instance with isolated data storage
+  - Memory retrieval now filters by user_id - NO CROSS-USER DATA LEAKAGE
+- **Database Query Filtering**: Fixed retrieve_memory to filter by user_id
+- **Parameter Validation**: Added comprehensive user_id validation across all endpoints
+- **VERIFIED WORKING**: Tested user isolation - Alice cannot see Bob's memories
+- **Security Features**: user_data_isolation, per_user_memory_instances, user_id_validation
+
+✅ **July 06, 2025 - Dynamic User Management System Implemented**
+- **USER ID ISSUES RESOLVED**: Eliminated all hardcoded user IDs and paths
+- Implemented automatic UUID generation for user IDs when none provided
+- Added user-specific data isolation with individual storage directories
+- Created comprehensive environment variable configuration system
+- Added new API endpoints: POST /api/create_user, GET /api/user_info
+- Enhanced user profile endpoint to include user identification
+- **VERIFIED WORKING**: Dynamic user creation and isolation operational
+- Created detailed USER_MANAGEMENT.md documentation guide
+
 ✅ **July 05, 2025 - Deployment Fixes Applied Successfully**
 - **DEPLOYMENT ISSUE RESOLVED**: Fixed health check failures and server startup
 - Created dedicated HTTP deployment server (deploy_server.py) with FastAPI

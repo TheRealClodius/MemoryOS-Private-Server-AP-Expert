@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 MemoryOS Deployment Server - SECURITY FIXED VERSION
 HTTP server for Replit deployment with proper user isolation and data security

@@ -1,0 +1,106 @@
+{
+  "server_info": {
+    "name": "MemoryOS Remote MCP Server",
+    "version": "1.0.0",
+    "transport": "streamable-http",
+    "protocol": "Model Context Protocol",
+    "description": "Remote MCP server for MemoryOS with multi-client support"
+  },
+  "deployment": {
+    "default_port": 3000,
+    "default_host": "0.0.0.0",
+    "environment_variables": {
+      "SERVER_MODE": "streamable-http",
+      "PORT": "3000",
+      "OPENAI_API_KEY": "your-openai-api-key-here"
+    }
+  },
+  "client_configuration": {
+    "description": "Configuration for MCP clients connecting to this remote server",
+    "claude_desktop": {
+      "config_file": "claude_desktop_config.json",
+      "example": {
+        "mcpServers": {
+          "memoryos-remote": {
+            "type": "streamable-http",
+            "url": "http://localhost:3000/mcp"
+          }
+        }
+      }
+    },
+    "custom_clients": {
+      "endpoint": "http://your-server:3000/mcp",
+      "method": "POST",
+      "content_type": "application/json",
+      "protocol": "JSON-RPC 2.0",
+      "session_headers": {
+        "X-Session-ID": "optional-session-identifier"
+      }
+    }
+  },
+  "api_endpoints": {
+    "mcp_protocol": {
+      "path": "/mcp",
+      "methods": ["POST", "GET", "DELETE"],
+      "description": "Main MCP protocol endpoint"
+    },
+    "health_check": {
+      "path": "/",
+      "method": "GET",
+      "description": "Basic health check"
+    },
+    "detailed_health": {
+      "path": "/health",
+      "method": "GET",
+      "description": "Detailed health and statistics"
+    }
+  },
+  "available_tools": [
+    {
+      "name": "add_memory",
+      "description": "Add a new memory to the MemoryOS system",
+      "parameters": {
+        "user_input": "string (required)",
+        "agent_response": "string (required)",
+        "memory_type": "string (optional: conversation, user_knowledge, assistant_knowledge)",
+        "tags": "array of strings (optional)"
+      }
+    },
+    {
+      "name": "retrieve_memory",
+      "description": "Retrieve relevant memories from MemoryOS",
+      "parameters": {
+        "query": "string (required)",
+        "memory_type": "string (optional filter)",
+        "max_results": "integer (optional, default: 10)"
+      }
+    },
+    {
+      "name": "get_user_profile",
+      "description": "Get comprehensive user profile information",
+      "parameters": {
+        "user_id": "string (optional, default: 'default')"
+      }
+    }
+  ],
+  "scaling": {
+    "multiple_clients": "Supported - each client can have independent sessions",
+    "concurrent_requests": "Supported via FastAPI async handling",
+    "load_balancing": "Can be deployed behind load balancers",
+    "authentication": "Currently none - can be added via reverse proxy"
+  },
+  "deployment_examples": {
+    "docker": {
+      "dockerfile": "Available in repository",
+      "environment": "Production ready"
+    },
+    "kubernetes": {
+      "deployment": "Standard FastAPI deployment patterns",
+      "service": "HTTP service on port 3000"
+    },
+    "cloud": {
+      "platforms": ["AWS", "GCP", "Azure", "Heroku", "Railway"],
+      "requirements": "Python 3.8+, 512MB RAM minimum"
+    }
+  }
+} 

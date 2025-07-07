@@ -8,6 +8,9 @@ import sys
 import os
 import json
 import asyncio
+import signal
+import logging
+from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 from pathlib import Path
@@ -33,6 +36,13 @@ except ImportError as e:
 
 # Global MemoryOS instance
 memoryos_instance = None
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 def load_config(config_path: str = "config.json") -> Dict[str, Any]:
     """Load configuration from file with environment variable fallbacks"""
@@ -278,17 +288,73 @@ async def get_user_profile_endpoint():
             }
         )
 
+async def deploy_streamable_http():
+    """Deploy MemoryOS as a StreamableHTTP MCP server"""
+    try:
+        # Import after path setup
+        from mcp_server import run_streamable_http_server
+        
+        logger.info("Starting MemoryOS MCP Server (StreamableHTTP)")
+        logger.info(f"Server URL: http://0.0.0.0:{os.getenv('PORT', '3000')}")
+        logger.info("Transport: StreamableHTTP")
+        logger.info("Ready for remote MCP clients")
+        
+        # Run the server
+        await run_streamable_http_server()
+        
+    except KeyboardInterrupt:
+        logger.info("Shutting down server...")
+    except Exception as e:
+        logger.error(f"Server error: {e}")
+        raise
+
+async def deploy_stdio():
+    """Deploy MemoryOS as a stdio MCP server (legacy mode)"""
+    try:
+        # Import after path setup
+        from mcp_server import mcp
+        
+        logger.info("Starting MemoryOS MCP Server (stdio - legacy mode)")
+        logger.info("Transport: stdio")
+        logger.info("Ready for local MCP clients")
+        
+        # Run the server
+        await mcp.run(transport="stdio")
+        
+    except KeyboardInterrupt:
+        logger.info("Shutting down server...")
+    except Exception as e:
+        logger.error(f"Server error: {e}")
+        raise
+
+async def main():
+    """Main deployment entry point"""
+    # Check deployment mode
+    mode = os.getenv("SERVER_MODE", "streamable-http").lower()
+    port = os.getenv("PORT", "3000")
+    
+    logger.info(f"MemoryOS MCP Server Deployment")
+    logger.info(f"Mode: {mode}")
+    logger.info(f"Port: {port}")
+    
+    if mode == "stdio":
+        await deploy_stdio()
+    elif mode in ["streamable-http", "http"]:
+        await deploy_streamable_http()
+    else:
+        logger.error(f"Unknown deployment mode: {mode}")
+        logger.error("Available modes: stdio, streamable-http, http")
+        sys.exit(1)
+
 if __name__ == "__main__":
-    # Get port from environment or use default
-    port = int(os.getenv("PORT", "5000"))
+    # Set default to StreamableHTTP for deployment
+    if "SERVER_MODE" not in os.environ:
+        os.environ["SERVER_MODE"] = "streamable-http"
     
-    print(f"Starting MemoryOS HTTP server on port {port}...", file=sys.stderr)
-    print(f"Health check endpoint: http://0.0.0.0:{port}/", file=sys.stderr)
-    print(f"Detailed health: http://0.0.0.0:{port}/health", file=sys.stderr)
-    
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=port,
-        log_level="info"
-    )
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Deployment stopped by user")
+    except Exception as e:
+        logger.error(f"Deployment failed: {e}")
+        sys.exit(1)

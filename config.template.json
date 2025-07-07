@@ -1,13 +1,61 @@
 {
-  "user_id": "demo_user",
-  "openai_base_url": "https://api.openai.com/v1",
-  "data_storage_path": "./memoryos_data",
-  "assistant_id": "mcp_assistant",
-  "llm_model": "gpt-4o-mini",
-  "embedding_model": "text-embedding-3-small",
-  "short_term_capacity": 10,
-  "mid_term_capacity": 2000,
-  "long_term_knowledge_capacity": 100,
-  "retrieval_queue_capacity": 7,
-  "mid_term_heat_threshold": 5.0
+  "memoryos": {
+    "openai_api_key": "your-openai-api-key-here",
+    "user_id": "default_user",
+    "assistant_id": "claude_assistant",
+    "memory_data_path": "./memoryos_data",
+    "openai_base_url": "https://api.openai.com/v1",
+    "llm_model": "gpt-4o-mini",
+    "embedding_model": "text-embedding-3-small",
+    "short_term_capacity": 25,
+    "mid_term_capacity": 100,
+    "long_term_knowledge_capacity": 100,
+    "retrieval_queue_capacity": 7,
+    "mid_term_heat_threshold": 5.0
+  },
+  "server": {
+    "mode": "streamable-http",
+    "port": 3000,
+    "host": "0.0.0.0"
+  },
+  "security": {
+    "api_keys": {
+      "description": "Configure API keys for client authentication",
+      "example": {
+        "your-app-1": "secure-random-key-1",
+        "your-app-2": "secure-random-key-2"
+      }
+    },
+    "rate_limiting": {
+      "requests_per_hour": 100,
+      "window_seconds": 3600
+    },
+    "cors": {
+      "enabled": true,
+      "allowed_origins": ["*"],
+      "allowed_methods": ["GET", "POST", "DELETE"]
+    },
+    "security_headers": {
+      "enabled": true,
+      "require_https": false
+    },
+    "trusted_hosts": ["*"],
+    "authentication": {
+      "required": true,
+      "disable_for_development": false
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  },
+  "deployment": {
+    "environment": "production",
+    "container_ready": true,
+    "reverse_proxy": {
+      "enabled": false,
+      "ssl_termination": false,
+      "load_balancer": false
+    }
+  }
 }

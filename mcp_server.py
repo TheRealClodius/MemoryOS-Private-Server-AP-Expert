@@ -11,6 +11,12 @@ import asyncio
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 from pathlib import Path
+import logging
+from contextlib import asynccontextmanager
+import time
+import hashlib
+import secrets
+from collections import defaultdict
 
 # Add the current directory to sys.path to import memoryos
 sys.path.insert(0, str(Path(__file__).parent))
@@ -20,6 +26,33 @@ try:
     from mcp.server.stdio import stdio_server
     from mcp.types import Tool
     from pydantic import BaseModel, Field
+    from mcp.server.models import InitializationOptions
+    from mcp.server.session import ServerSession
+    from mcp.server import Server
+    from mcp.shared.exceptions import McpError
+    from mcp.types import (
+    JSONRPCRequest, 
+    JSONRPCResponse, 
+    JSONRPCError,
+    InitializeRequest,
+    InitializeResult,
+    ServerCapabilities,
+        CallToolRequest,
+        CallToolResult,
+        ListToolsRequest,
+        ListToolsResult,
+        ListResourcesRequest,
+        ListResourcesResult,
+        ListPromptsRequest,
+        ListPromptsResult,
+        ReadResourceRequest,
+        ReadResourceResult,
+        GetPromptRequest,
+        GetPromptResult,
+        TextContent,
+        ImageContent,
+        EmbeddedResource
+    )
 except ImportError as e:
     print(f"ERROR: Failed to import MCP SDK. Please install: pip install mcp", file=sys.stderr)
     print(f"Import error: {e}", file=sys.stderr)
@@ -27,8 +60,14 @@ except ImportError as e:
 
 # Import FastAPI for HTTP health check endpoint
 try:
-    from fastapi import FastAPI
+    from fastapi import FastAPI, Request, Response, HTTPException, Depends, Security
     from fastapi.responses import JSONResponse
+    from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials, APIKeyHeader
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.middleware.trustedhost import TrustedHostMiddleware
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.requests import Request as StarletteRequest
+    from starlette.responses import Response as StarletteResponse
     import uvicorn
     FASTAPI_AVAILABLE = True
 except ImportError:
@@ -92,6 +131,140 @@ class UserProfileResult(BaseModel):
 # Global MemoryOS instance
 memoryos_instance: Optional[Memoryos] = None
 
+# Security Configuration
+class SecurityConfig:
+    def __init__(self):
+        self.api_keys = self._load_api_keys()
+        self.rate_limit_requests = int(os.getenv("RATE_LIMIT_REQUESTS", "100"))
+        self.rate_limit_window = int(os.getenv("RATE_LIMIT_WINDOW", "3600"))  # 1 hour
+        self.enable_cors = os.getenv("ENABLE_CORS", "true").lower() == "true"
+        self.allowed_origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+        self.trusted_hosts = os.getenv("TRUSTED_HOSTS", "*").split(",")
+        self.require_https = os.getenv("REQUIRE_HTTPS", "false").lower() == "true"
+    
+    def _load_api_keys(self) -> Dict[str, Dict[str, str]]:
+        """Load API keys from environment or generate default"""
+        api_keys = {}
+        
+        # Load from environment
+        env_keys = os.getenv("MCP_API_KEYS", "")
+        if env_keys:
+            for key_pair in env_keys.split(","):
+                if ":" in key_pair:
+                    name, key = key_pair.split(":", 1)
+                    api_keys[key] = {"name": name.strip(), "created": datetime.now().isoformat()}
+        
+        # Generate default key if none provided
+        if not api_keys:
+            default_key = os.getenv("MCP_API_KEY")
+            if not default_key:
+                default_key = secrets.token_urlsafe(32)
+                print(f"🔑 Generated API Key: {default_key}", file=sys.stderr)
+                print("🔑 Set MCP_API_KEY environment variable to use this key", file=sys.stderr)
+            
+            api_keys[default_key] = {"name": "default", "created": datetime.now().isoformat()}
+        
+        return api_keys
+    
+    def validate_api_key(self, api_key: str) -> Optional[Dict[str, str]]:
+        """Validate API key and return key info"""
+        return self.api_keys.get(api_key)
+
+# Initialize security configuration
+security_config = SecurityConfig()
+
+# Rate limiting storage
+rate_limit_storage = defaultdict(list)
+
+# Security Middleware Classes
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security headers to all responses"""
+    
+    async def dispatch(self, request: StarletteRequest, call_next):
+        response = await call_next(request)
+        
+        # Security headers
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Server"] = "MemoryOS-MCP"
+        
+        # HTTPS enforcement
+        if security_config.require_https and request.url.scheme != "https":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        
+        return response
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Rate limiting middleware"""
+    
+    async def dispatch(self, request: StarletteRequest, call_next):
+        # Skip rate limiting for health checks
+        if request.url.path in ["/", "/health"]:
+            return await call_next(request)
+        
+        # Get client IP
+        client_ip = request.client.host
+        if "x-forwarded-for" in request.headers:
+            client_ip = request.headers["x-forwarded-for"].split(",")[0].strip()
+        
+        # Check rate limit
+        now = time.time()
+        window_start = now - security_config.rate_limit_window
+        
+        # Clean old requests
+        rate_limit_storage[client_ip] = [
+            req_time for req_time in rate_limit_storage[client_ip] 
+            if req_time > window_start
+        ]
+        
+        # Check if over limit
+        if len(rate_limit_storage[client_ip]) >= security_config.rate_limit_requests:
+            return Response(
+                content='{"error": "Rate limit exceeded"}',
+                status_code=429,
+                headers={"Retry-After": str(security_config.rate_limit_window)}
+            )
+        
+        # Add current request
+        rate_limit_storage[client_ip].append(now)
+        
+        return await call_next(request)
+
+# Authentication schemes
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+bearer_scheme = HTTPBearer(auto_error=False)
+
+async def get_api_key(
+    api_key_header: Optional[str] = Security(api_key_header),
+    bearer_token: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme)
+) -> str:
+    """Extract API key from header or bearer token"""
+    
+    # Try header first
+    if api_key_header:
+        key_info = security_config.validate_api_key(api_key_header)
+        if key_info:
+            return api_key_header
+    
+    # Try bearer token
+    if bearer_token:
+        key_info = security_config.validate_api_key(bearer_token.credentials)
+        if key_info:
+            return bearer_token.credentials
+    
+    # Check if authentication is disabled for development
+    if os.getenv("DISABLE_AUTH", "false").lower() == "true":
+        print("⚠️  Authentication disabled - development mode only!", file=sys.stderr)
+        return "dev-mode"
+    
+    raise HTTPException(
+        status_code=401,
+        detail="Invalid or missing API key",
+        headers={"WWW-Authenticate": "Bearer"}
+    )
+
 def load_config(config_path: str = "config.json") -> Dict[str, Any]:
     """Load configuration from file with environment variable fallbacks"""
     config = {}
@@ -147,6 +320,342 @@ def init_memoryos(config: Dict[str, Any]) -> Memoryos:
 # Create FastMCP server instance
 mcp = FastMCP("MemoryOS")
 
+# Create FastAPI app with security
+app = FastAPI(
+    title="MemoryOS MCP Server (Secure)",
+    version="1.0.0",
+    description="Remote MCP server for MemoryOS with authentication",
+    docs_url="/docs" if os.getenv("ENABLE_DOCS", "false").lower() == "true" else None,
+    redoc_url=None
+)
+
+# Add security middleware
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RateLimitMiddleware)
+
+# Add CORS middleware if enabled
+if security_config.enable_cors:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=security_config.allowed_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "DELETE"],
+        allow_headers=["*"],
+    )
+
+# Add trusted host middleware
+if security_config.trusted_hosts != ["*"]:
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=security_config.trusted_hosts
+    )
+
+# StreamableHTTP MCP Server Implementation
+class StreamableHTTPMCPServer:
+    def __init__(self):
+        self.server = Server("MemoryOS")
+        self.sessions: Dict[str, ServerSession] = {}
+        self.setup_handlers()
+    
+    def setup_handlers(self):
+        """Setup MCP protocol handlers"""
+        
+        @self.server.list_tools()
+        async def list_tools() -> List[ToolInfo]:
+            return [
+                ToolInfo(
+                    name="add_memory",
+                    description="Add a new memory to the MemoryOS system",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "user_input": {"type": "string", "description": "The user's input or question"},
+                            "agent_response": {"type": "string", "description": "The agent's response"},
+                            "memory_type": {"type": "string", "enum": ["conversation", "user_knowledge", "assistant_knowledge"], "default": "conversation"},
+                            "tags": {"type": "array", "items": {"type": "string"}, "description": "Optional tags"}
+                        },
+                        "required": ["user_input", "agent_response"]
+                    }
+                ),
+                ToolInfo(
+                    name="retrieve_memory",
+                    description="Retrieve relevant memories from MemoryOS",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string", "description": "Search query"},
+                            "memory_type": {"type": "string", "enum": ["conversation", "user_knowledge", "assistant_knowledge"], "description": "Filter by memory type"},
+                            "max_results": {"type": "integer", "default": 10, "description": "Maximum number of results"}
+                        },
+                        "required": ["query"]
+                    }
+                ),
+                ToolInfo(
+                    name="get_user_profile",
+                    description="Get comprehensive user profile information",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "user_id": {"type": "string", "description": "User identifier", "default": "default"}
+                        }
+                    }
+                )
+            ]
+        
+        @self.server.call_tool()
+        async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
+            try:
+                if name == "add_memory":
+                    result = await add_memory_handler(
+                        arguments.get("user_input", ""),
+                        arguments.get("agent_response", ""),
+                        arguments.get("memory_type", "conversation"),
+                        arguments.get("tags", [])
+                    )
+                    return [TextContent(type="text", text=json.dumps(result.dict()))]
+                
+                elif name == "retrieve_memory":
+                    result = await retrieve_memory_handler(
+                        arguments.get("query", ""),
+                        arguments.get("memory_type"),
+                        arguments.get("max_results", 10)
+                    )
+                    return [TextContent(type="text", text=json.dumps(result.dict()))]
+                
+                elif name == "get_user_profile":
+                    result = await get_user_profile_handler(
+                        arguments.get("user_id", "default")
+                    )
+                    return [TextContent(type="text", text=json.dumps(result.dict()))]
+                
+                else:
+                    raise McpError(f"Unknown tool: {name}")
+            
+            except Exception as e:
+                print(f"Error in call_tool: {e}", file=sys.stderr)
+                raise McpError(f"Tool execution failed: {str(e)}")
+
+# Initialize StreamableHTTP server
+streamable_server = StreamableHTTPMCPServer()
+
+# Update MCP endpoints with authentication
+@app.post("/mcp")
+async def handle_mcp_request(
+    request: Request, 
+    api_key: str = Depends(get_api_key)
+) -> JSONResponse:
+    """Handle authenticated MCP JSON-RPC requests via StreamableHTTP"""
+    try:
+        # Log authenticated request
+        key_info = security_config.validate_api_key(api_key)
+        if key_info:
+            print(f"🔐 Authenticated request from: {key_info['name']}", file=sys.stderr)
+        
+        # Parse JSON-RPC request
+        body = await request.body()
+        if not body:
+            raise HTTPException(status_code=400, detail="Empty request body")
+        
+        json_request = json.loads(body.decode())
+        
+        # Create or get session with API key context
+        session_id = request.headers.get("X-Session-ID", f"{api_key[:8]}-{secrets.token_hex(4)}")
+        if session_id not in streamable_server.sessions:
+            streamable_server.sessions[session_id] = ServerSession(
+                streamable_server.server,
+                InitializationOptions(
+                    server_name="MemoryOS",
+                    server_version="1.0.0",
+                    capabilities=streamable_server.server.get_capabilities()
+                )
+            )
+        
+        session = streamable_server.sessions[session_id]
+        
+        # Process request through MCP session
+        response = await session.handle_request(json_request)
+        
+        return JSONResponse(content=response)
+        
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    except Exception as e:
+        print(f"Error processing authenticated MCP request: {e}", file=sys.stderr)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/mcp")
+async def handle_mcp_sse(
+    request: Request,
+    api_key: str = Depends(get_api_key)
+):
+    """Handle authenticated MCP Server-Sent Events (SSE) endpoint"""
+    # SSE implementation would go here
+    raise HTTPException(status_code=501, detail="SSE not implemented yet")
+
+@app.delete("/mcp")
+async def handle_mcp_disconnect(
+    request: Request,
+    api_key: str = Depends(get_api_key)
+):
+    """Handle authenticated MCP session termination"""
+    session_id = request.headers.get("X-Session-ID", f"{api_key[:8]}-default")
+    if session_id in streamable_server.sessions:
+        del streamable_server.sessions[session_id]
+        print(f"🔐 Session terminated for API key: {api_key[:8]}...", file=sys.stderr)
+    return {"status": "disconnected"}
+
+# Public endpoints (no authentication required)
+@app.get("/")
+async def health_check():
+    """Public health check endpoint"""
+    try:
+        return JSONResponse({
+            "status": "healthy",
+            "service": "MemoryOS MCP Server (Secure)",
+            "version": "1.0.0",
+            "timestamp": datetime.now().isoformat(),
+            "authentication": "enabled",
+            "capabilities": [
+                "add_memory",
+                "retrieve_memory", 
+                "get_user_profile"
+            ]
+        })
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+        )
+
+@app.get("/health")
+async def detailed_health():
+    """Public detailed health check"""
+    try:
+        # Don't initialize MemoryOS for health check to avoid dependencies
+        return JSONResponse({
+            "status": "healthy",
+            "service": "MemoryOS MCP Server (Secure)",
+            "version": "1.0.0",
+            "timestamp": datetime.now().isoformat(),
+            "authentication": {
+                "enabled": True,
+                "api_keys_configured": len(security_config.api_keys),
+                "rate_limiting": {
+                    "requests_per_window": security_config.rate_limit_requests,
+                    "window_seconds": security_config.rate_limit_window
+                }
+            },
+            "security": {
+                "cors_enabled": security_config.enable_cors,
+                "https_required": security_config.require_https,
+                "trusted_hosts": security_config.trusted_hosts
+            },
+            "active_sessions": len(streamable_server.sessions)
+        })
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+        )
+
+# Admin endpoints (require authentication)
+@app.get("/admin/sessions")
+async def list_sessions(api_key: str = Depends(get_api_key)):
+    """List active MCP sessions"""
+    return {
+        "active_sessions": len(streamable_server.sessions),
+        "sessions": list(streamable_server.sessions.keys())
+    }
+
+@app.get("/admin/stats")
+async def get_stats(api_key: str = Depends(get_api_key)):
+    """Get detailed server statistics"""
+    return {
+        "timestamp": datetime.now().isoformat(),
+        "sessions": len(streamable_server.sessions),
+        "api_keys": len(security_config.api_keys),
+        "rate_limit_stats": {
+            "active_clients": len(rate_limit_storage),
+            "total_requests": sum(len(reqs) for reqs in rate_limit_storage.values())
+        }
+    }
+
+async def init_server():
+    """Initialize the MemoryOS server"""
+    global memoryos_instance
+    
+    # Load configuration
+    print("Loading MemoryOS configuration...", file=sys.stderr)
+    config = load_config()
+    
+    # Initialize MemoryOS
+    print(f"Initializing MemoryOS for user: {config['user_id']}", file=sys.stderr)
+    memoryos_instance = init_memoryos(config)
+    
+    # Verify initialization by checking memory stats
+    try:
+        stats = memoryos_instance.get_memory_stats()
+        print(f"MemoryOS initialization verified:", file=sys.stderr)
+        print(f"  Short-term memories: {stats.get('short_term', {}).get('total_entries', 0)}", file=sys.stderr)
+        print(f"  User data path: {memoryos_instance.data_storage_path}/{memoryos_instance.user_id}", file=sys.stderr)
+    except Exception as e:
+        print(f"Warning: Could not verify MemoryOS initialization: {e}", file=sys.stderr)
+    
+    print(f"MemoryOS MCP Server started successfully", file=sys.stderr)
+    print(f"User: {config['user_id']}, Assistant: {config['assistant_id']}", file=sys.stderr)
+    print(f"Data storage: {config['data_storage_path']}", file=sys.stderr)
+    print(f"LLM model: {config['llm_model']}, Embedding model: {config['embedding_model']}", file=sys.stderr)
+    
+    return config
+
+async def run_streamable_http_server():
+    """Run the StreamableHTTP MCP server"""
+    try:
+        # Initialize MemoryOS
+        print("Initializing MemoryOS...", file=sys.stderr)
+        await initialize_memoryos()
+        
+        print("MemoryOS MCP Server starting on StreamableHTTP transport...", file=sys.stderr)
+        
+        # Run server
+        config = uvicorn.Config(
+            app,
+            host="0.0.0.0",
+            port=int(os.getenv("PORT", "3000")),
+            log_level="info"
+        )
+        server = uvicorn.Server(config)
+        await server.serve()
+        
+    except Exception as e:
+        print(f"Error running StreamableHTTP server: {e}", file=sys.stderr)
+        raise
+
+async def main():
+    """Main entry point - now defaults to StreamableHTTP"""
+    mode = os.getenv("SERVER_MODE", "streamable-http").lower()
+    
+    if mode == "stdio":
+        # Legacy stdio mode for backward compatibility
+        print("Running in legacy stdio mode", file=sys.stderr)
+        await mcp.run(transport="stdio")
+    elif mode == "streamable-http" or mode == "http":
+        # Modern StreamableHTTP mode (default)
+        await run_streamable_http_server()
+    else:
+        print(f"Unknown server mode: {mode}", file=sys.stderr)
+        print("Available modes: stdio, streamable-http, http", file=sys.stderr)
+        sys.exit(1)
+
+# Add MCP tool functions back
 @mcp.tool()
 async def add_memory(
     user_input: str,
@@ -451,162 +960,6 @@ async def get_user_profile(
             assistant_id=memoryos_instance.assistant_id if memoryos_instance else "unknown",
             user_profile=f"Error retrieving user profile: {str(e)}"
         )
-
-async def init_server():
-    """Initialize the MemoryOS server"""
-    global memoryos_instance
-    
-    # Load configuration
-    print("Loading MemoryOS configuration...", file=sys.stderr)
-    config = load_config()
-    
-    # Initialize MemoryOS
-    print(f"Initializing MemoryOS for user: {config['user_id']}", file=sys.stderr)
-    memoryos_instance = init_memoryos(config)
-    
-    # Verify initialization by checking memory stats
-    try:
-        stats = memoryos_instance.get_memory_stats()
-        print(f"MemoryOS initialization verified:", file=sys.stderr)
-        print(f"  Short-term memories: {stats.get('short_term', {}).get('total_entries', 0)}", file=sys.stderr)
-        print(f"  User data path: {memoryos_instance.data_storage_path}/{memoryos_instance.user_id}", file=sys.stderr)
-    except Exception as e:
-        print(f"Warning: Could not verify MemoryOS initialization: {e}", file=sys.stderr)
-    
-    print(f"MemoryOS MCP Server started successfully", file=sys.stderr)
-    print(f"User: {config['user_id']}, Assistant: {config['assistant_id']}", file=sys.stderr)
-    print(f"Data storage: {config['data_storage_path']}", file=sys.stderr)
-    print(f"LLM model: {config['llm_model']}, Embedding model: {config['embedding_model']}", file=sys.stderr)
-    
-    return config
-
-async def run_mcp_server():
-    """Run the MCP server with stdio transport"""
-    try:
-        await init_server()
-        print("Starting MCP server with stdio transport...", file=sys.stderr)
-        
-        # Run MCP server with stdio transport
-        await mcp.run(transport="stdio")
-    
-    except KeyboardInterrupt:
-        print("\nMCP server interrupted by user", file=sys.stderr)
-    except Exception as e:
-        print(f"MCP server error: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
-
-def create_health_check_app():
-    """Create FastAPI app for health checks"""
-    if not FASTAPI_AVAILABLE:
-        return None
-    
-    app = FastAPI(title="MemoryOS MCP Server", version="1.0.0")
-    
-    @app.get("/")
-    async def health_check():
-        """Health check endpoint for deployment"""
-        try:
-            # Initialize server if not already done
-            if memoryos_instance is None:
-                await init_server()
-            
-            return JSONResponse({
-                "status": "healthy",
-                "service": "MemoryOS MCP Server",
-                "version": "1.0.0",
-                "timestamp": datetime.now().isoformat(),
-                "capabilities": [
-                    "add_memory",
-                    "retrieve_memory", 
-                    "get_user_profile"
-                ]
-            })
-        except Exception as e:
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "status": "error",
-                    "error": str(e),
-                    "timestamp": datetime.now().isoformat()
-                }
-            )
-    
-    @app.get("/health")
-    async def detailed_health():
-        """Detailed health check"""
-        try:
-            if memoryos_instance is None:
-                await init_server()
-            
-            # Test basic functionality
-            stats = memoryos_instance.get_memory_stats()
-            
-            return JSONResponse({
-                "status": "healthy",
-                "service": "MemoryOS MCP Server",
-                "version": "1.0.0",
-                "timestamp": datetime.now().isoformat(),
-                "memory_stats": stats,
-                "openai_configured": bool(os.getenv("OPENAI_API_KEY"))
-            })
-        except Exception as e:
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "status": "error",
-                    "error": str(e),
-                    "timestamp": datetime.now().isoformat()
-                }
-            )
-    
-    return app
-
-async def run_http_server():
-    """Run HTTP server for health checks"""
-    if not FASTAPI_AVAILABLE:
-        print("FastAPI not available, cannot run HTTP server", file=sys.stderr)
-        return
-    
-    app = create_health_check_app()
-    if app is None:
-        return
-    
-    # Get port from environment or use default
-    port = int(os.getenv("PORT", "5000"))
-    
-    print(f"Starting HTTP health check server on port {port}...", file=sys.stderr)
-    
-    config = uvicorn.Config(
-        app=app,
-        host="0.0.0.0",
-        port=port,
-        log_level="info"
-    )
-    server = uvicorn.Server(config)
-    await server.serve()
-
-async def main():
-    """Main server function"""
-    try:
-        # Check if we should run HTTP server (for deployment) or MCP server (for local use)
-        mode = os.getenv("SERVER_MODE", "mcp").lower()
-        
-        if mode == "http" or os.getenv("PORT"):
-            # Run HTTP server for deployment
-            await run_http_server()
-        else:
-            # Run MCP server for local use
-            await run_mcp_server()
-            
-    except KeyboardInterrupt:
-        print("\nServer interrupted by user", file=sys.stderr)
-    except Exception as e:
-        print(f"Server error: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
 
 if __name__ == "__main__":
     asyncio.run(main())

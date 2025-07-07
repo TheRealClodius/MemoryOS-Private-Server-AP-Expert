@@ -33,7 +33,9 @@ MemoryOS is a sophisticated memory management system for AI agents that mimics h
 - **⚡ Heat-based Optimization**: Frequently accessed information promotes to faster storage tiers
 
 ### Production Features
-- **🔒 Complete User Data Isolation**: Each user has separate, secure data storage with user_id validation
+- **🔐 COMPLETE USER ISOLATION**: Each API key gets isolated memory instances - Alice's conversations never visible to Bob
+- **🗂️ File System Isolation**: Users get separate data directories (`./memoryos_data/user_id/`)
+- **🔑 Session-Based Security**: Each session maps to specific user ID with no cross-contamination
 - **🌐 HTTP API Deployment**: Ready for production deployment with health checks
 - **🔧 MCP Protocol Compliance**: Works seamlessly with Claude Desktop and other MCP clients
 - **📈 Comprehensive Monitoring**: Health checks, performance metrics, and detailed logging

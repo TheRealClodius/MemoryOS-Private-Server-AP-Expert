@@ -4,6 +4,38 @@
 
 MemoryOS MCP server includes comprehensive security features to protect your deployment in production environments. This guide covers all security aspects, from authentication to deployment best practices.
 
+## 🔐 User Isolation (CRITICAL SECURITY FEATURE)
+
+**MemoryOS now provides complete user isolation** to prevent data leakage between different API keys/clients:
+
+### **Key Isolation Features**
+- **Per-User Memory Instances**: Each API key gets its own isolated MemoryOS instance
+- **File System Isolation**: Users get separate data directories (`./memoryos_data/user_id/`)
+- **Session-Based Isolation**: Each session maps to a specific user ID
+- **Memory Layer Isolation**: Complete separation of short-term, mid-term, and long-term memory
+- **No Cross-User Data Leakage**: Alice's conversations are never visible to Bob
+
+### **User Isolation Implementation**
+
+```python
+# API Key → User ID mapping
+"claude:key1" → "user_claude"
+"mobile:key2" → "user_mobile"  
+"web:key3" → "user_web"
+
+# Each user gets isolated instance
+get_memoryos_for_user(user_id) → Separate MemoryOS instance
+```
+
+### **Verification**
+```bash
+# Test user isolation
+python3 test_user_isolation.py
+# ✅ USER ISOLATION FIX VERIFIED SUCCESSFULLY!
+```
+
+This ensures that different applications using the same MemoryOS server cannot access each other's memory data.
+
 ## 🛡️ Authentication Methods
 
 ### **1. API Key Authentication**

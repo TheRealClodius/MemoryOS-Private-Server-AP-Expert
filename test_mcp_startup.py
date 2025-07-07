@@ -123,11 +123,11 @@ def test_server_startup():
         print(f"   Error indicators: {found_errors}")
         
         return found_success >= 2 and found_errors == 0
-        
+            
     except Exception as e:
         print(f"❌ Server startup test failed: {e}")
         return False
-    
+
     finally:
         # Clean up test config
         try:
@@ -174,11 +174,11 @@ def test_config_loading():
             for key, old_value in old_env.items():
                 if old_value is None:
                     os.environ.pop(key, None)
-                else:
+            else:
                     os.environ[key] = old_value
         
         return config_success
-        
+                
     except Exception as e:
         print(f"❌ Configuration loading test failed: {e}")
         return False
@@ -197,9 +197,9 @@ def main():
         results.append(("Configuration Loading", False))
     
     # Test 2: Server startup
-    try:
+        try:
         results.append(("Server Startup", test_server_startup()))
-    except Exception as e:
+        except Exception as e:
         print(f"❌ Server startup test crashed: {e}")
         results.append(("Server Startup", False))
     

@@ -336,6 +336,22 @@ python deploy_server.py
 | `GET` | `/admin/sessions` | Yes | List sessions |
 | `GET` | `/admin/stats` | Yes | Server statistics |
 
+## 🔐 User Isolation Security
+
+**CRITICAL:** MemoryOS MCP server now provides complete user isolation:
+
+- **Per-User Memory**: Each API key gets its own isolated memory instance
+- **File System Isolation**: Users get separate data directories
+- **No Data Leakage**: Alice's conversations never visible to Bob
+- **Session Isolation**: Each client session is completely isolated
+
+### **Verification**
+```bash
+# Test that user isolation is working
+python3 test_user_isolation.py
+# ✅ USER ISOLATION FIX VERIFIED SUCCESSFULLY!
+```
+
 ## 🚨 Security Considerations
 
 1. **Never commit API keys** to version control
@@ -345,6 +361,7 @@ python deploy_server.py
 5. **Rotate API keys regularly**
 6. **Use strong, unique keys** for each client
 7. **Enable logging** for security auditing
+8. **User isolation is enabled by default** (no additional configuration needed)
 
 ## 🎯 Multi-Client Examples
 

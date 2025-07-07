@@ -131,6 +131,69 @@ class UserProfileResult(BaseModel):
 # Global MemoryOS instance
 memoryos_instance: Optional[Memoryos] = None
 
+# User management - add proper user isolation
+_user_instances: Dict[str, Memoryos] = {}
+_session_user_map: Dict[str, str] = {}
+
+def get_memoryos_for_user(user_id: str, assistant_id: str = "mcp_assistant") -> Memoryos:
+    """Get or create MemoryOS instance for specific user with proper isolation"""
+    global _user_instances
+    
+    # Validate user_id
+    if not user_id or not user_id.strip():
+        raise ValueError("user_id cannot be empty or null")
+    
+    # Create cache key
+    cache_key = f"{user_id}_{assistant_id}"
+    
+    # Return existing instance if available
+    if cache_key in _user_instances:
+        return _user_instances[cache_key]
+    
+    # Load base configuration
+    config = load_config()
+    
+    # Create user-specific MemoryOS instance
+    try:
+        instance = Memoryos(
+            user_id=user_id,
+            assistant_id=assistant_id,
+            openai_api_key=config["openai_api_key"],
+            openai_base_url=config["openai_base_url"],
+            data_storage_path=config["data_storage_path"],
+            short_term_capacity=config["short_term_capacity"],
+            mid_term_capacity=config["mid_term_capacity"],
+            long_term_knowledge_capacity=config["long_term_knowledge_capacity"],
+            retrieval_queue_capacity=config["retrieval_queue_capacity"],
+            mid_term_heat_threshold=config["mid_term_heat_threshold"],
+            llm_model=config["llm_model"],
+            embedding_model=config["embedding_model"]
+        )
+        
+        # Cache the instance
+        _user_instances[cache_key] = instance
+        print(f"🔐 Created isolated MemoryOS instance for user: {user_id}", file=sys.stderr)
+        return instance
+        
+    except Exception as e:
+        raise RuntimeError(f"Failed to initialize MemoryOS for user {user_id}: {str(e)}")
+
+def get_user_id_from_session(session_id: str) -> str:
+    """Get user ID from session, with fallback to API key mapping"""
+    if session_id in _session_user_map:
+        return _session_user_map[session_id]
+    
+    # If no explicit user mapping, use session ID as user ID
+    # This ensures isolation even without explicit user setup
+    user_id = f"session_{session_id[:8]}"
+    _session_user_map[session_id] = user_id
+    return user_id
+
+def set_user_for_session(session_id: str, user_id: str):
+    """Set user ID for a session"""
+    _session_user_map[session_id] = user_id
+    print(f"🔐 Mapped session {session_id[:8]}... to user {user_id}", file=sys.stderr)
+
 # Security Configuration
 class SecurityConfig:
     def __init__(self):
@@ -365,6 +428,7 @@ class StreamableHTTPMCPServer:
     def __init__(self):
         self.server = Server("MemoryOS")
         self.sessions: Dict[str, ServerSession] = {}
+        self.current_session_id: Optional[str] = None
         self.setup_handlers()
     
     def setup_handlers(self):
@@ -445,6 +509,174 @@ class StreamableHTTPMCPServer:
                 print(f"Error in call_tool: {e}", file=sys.stderr)
                 raise McpError(f"Tool execution failed: {str(e)}")
 
+# Handler functions for StreamableHTTP MCP server with user isolation
+async def add_memory_handler(
+    user_input: str,
+    agent_response: str,
+    memory_type: str = "conversation",
+    tags: List[str] = None
+) -> MemoryOperationResult:
+    """Add memory handler with user isolation"""
+    try:
+        # Get user ID from current session
+        if not streamable_server.current_session_id:
+            raise ValueError("No active session")
+        
+        user_id = get_user_id_from_session(streamable_server.current_session_id)
+        memoryos_instance = get_memoryos_for_user(user_id)
+        
+        # Add memory to user's specific instance
+        result = memoryos_instance.add_memory(
+            user_input=user_input,
+            agent_response=agent_response,
+            timestamp=datetime.now().isoformat(),
+            meta_data={"type": memory_type, "tags": tags or []}
+        )
+        
+        if result.get("status") == "success":
+            return MemoryOperationResult(
+                status="success",
+                message=f"Memory added successfully for user {user_id}",
+                timestamp=datetime.now().isoformat(),
+                details={"user_id": user_id, "memory_type": memory_type}
+            )
+        else:
+            return MemoryOperationResult(
+                status="error",
+                message=result.get("message", "Unknown error"),
+                timestamp=datetime.now().isoformat()
+            )
+    
+    except Exception as e:
+        return MemoryOperationResult(
+            status="error",
+            message=f"Error adding memory: {str(e)}",
+            timestamp=datetime.now().isoformat()
+        )
+
+async def retrieve_memory_handler(
+    query: str,
+    memory_type: Optional[str] = None,
+    max_results: int = 10
+) -> MemoryRetrievalResult:
+    """Retrieve memory handler with user isolation"""
+    try:
+        # Get user ID from current session
+        if not streamable_server.current_session_id:
+            raise ValueError("No active session")
+        
+        user_id = get_user_id_from_session(streamable_server.current_session_id)
+        memoryos_instance = get_memoryos_for_user(user_id)
+        
+        # Generate embedding for the query
+        query_embedding = memoryos_instance._generate_embedding(query)
+        
+        # Retrieve context from user's specific instance
+        retrieval_results = memoryos_instance.retriever.retrieve_context(
+            user_query=query,
+            user_id=user_id,
+            query_embedding=query_embedding
+        )
+        
+        # Get user profile
+        user_profile = memoryos_instance.get_user_profile_summary()
+        
+        # Format results
+        short_term_entries = []
+        for entry in retrieval_results.get("short_term_memory", []):
+            short_term_entries.append(MemoryEntry(
+                user_input=entry.get("user_input", ""),
+                agent_response=entry.get("agent_response", ""),
+                timestamp=entry.get("timestamp", ""),
+                meta_info=entry.get("meta_data", {})
+            ))
+        
+        retrieved_pages = []
+        for page in retrieval_results.get("retrieved_pages", [])[:max_results]:
+            retrieved_pages.append(MemoryEntry(
+                user_input=page.get("user_input", ""),
+                agent_response=page.get("agent_response", ""),
+                timestamp=page.get("timestamp", ""),
+                meta_info=page.get("meta_info", {})
+            ))
+        
+        user_knowledge = []
+        for knowledge in retrieval_results.get("retrieved_user_knowledge", [])[:max_results]:
+            user_knowledge.append(KnowledgeEntry(
+                knowledge=knowledge.get("knowledge", ""),
+                timestamp=knowledge.get("timestamp", ""),
+                source=knowledge.get("source"),
+                confidence=knowledge.get("confidence"),
+                similarity_score=knowledge.get("similarity_score")
+            ))
+        
+        assistant_knowledge = []
+        for knowledge in retrieval_results.get("retrieved_assistant_knowledge", [])[:max_results]:
+            assistant_knowledge.append(KnowledgeEntry(
+                knowledge=knowledge.get("knowledge", ""),
+                timestamp=knowledge.get("timestamp", ""),
+                source=knowledge.get("source"),
+                confidence=knowledge.get("confidence"),
+                similarity_score=knowledge.get("similarity_score")
+            ))
+        
+        return MemoryRetrievalResult(
+            status="success",
+            query=query,
+            timestamp=datetime.now().isoformat(),
+            user_profile=user_profile,
+            short_term_memory=short_term_entries,
+            short_term_count=len(short_term_entries),
+            retrieved_pages=retrieved_pages,
+            retrieved_user_knowledge=user_knowledge,
+            retrieved_assistant_knowledge=assistant_knowledge
+        )
+    
+    except Exception as e:
+        return MemoryRetrievalResult(
+            status="error",
+            query=query,
+            timestamp=datetime.now().isoformat(),
+            user_profile=f"Error: {str(e)}",
+            short_term_memory=[],
+            short_term_count=0,
+            retrieved_pages=[],
+            retrieved_user_knowledge=[],
+            retrieved_assistant_knowledge=[]
+        )
+
+async def get_user_profile_handler(user_id: str = "default") -> UserProfileResult:
+    """Get user profile handler with user isolation"""
+    try:
+        # Get user ID from current session (override parameter)
+        if not streamable_server.current_session_id:
+            raise ValueError("No active session")
+        
+        session_user_id = get_user_id_from_session(streamable_server.current_session_id)
+        memoryos_instance = get_memoryos_for_user(session_user_id)
+        
+        # Get profile for the session user only
+        user_profile = memoryos_instance.get_user_profile_summary()
+        if not user_profile or user_profile.lower() == "none":
+            user_profile = "No detailed user profile available yet"
+        
+        return UserProfileResult(
+            status="success",
+            timestamp=datetime.now().isoformat(),
+            user_id=session_user_id,
+            assistant_id=memoryos_instance.assistant_id,
+            user_profile=user_profile
+        )
+    
+    except Exception as e:
+        return UserProfileResult(
+            status="error",
+            timestamp=datetime.now().isoformat(),
+            user_id="unknown",
+            assistant_id="unknown",
+            user_profile=f"Error: {str(e)}"
+        )
+
 # Initialize StreamableHTTP server
 streamable_server = StreamableHTTPMCPServer()
 
@@ -470,6 +702,16 @@ async def handle_mcp_request(
         
         # Create or get session with API key context
         session_id = request.headers.get("X-Session-ID", f"{api_key[:8]}-{secrets.token_hex(4)}")
+        
+        # Map API key to user ID for isolation
+        user_id = request.headers.get("X-User-ID")
+        if not user_id:
+            # Use API key name as default user ID for isolation
+            user_id = key_info.get("name", f"user_{api_key[:8]}") if key_info else f"user_{api_key[:8]}"
+        
+        # Set user for this session
+        set_user_for_session(session_id, user_id)
+        
         if session_id not in streamable_server.sessions:
             streamable_server.sessions[session_id] = ServerSession(
                 streamable_server.server,
@@ -481,6 +723,9 @@ async def handle_mcp_request(
             )
         
         session = streamable_server.sessions[session_id]
+        
+        # Store session context for tools
+        streamable_server.current_session_id = session_id
         
         # Process request through MCP session
         response = await session.handle_request(json_request)
@@ -599,28 +844,13 @@ async def get_stats(api_key: str = Depends(get_api_key)):
     }
 
 async def init_server():
-    """Initialize the MemoryOS server"""
-    global memoryos_instance
-    
-    # Load configuration
+    """Initialize the MemoryOS server (no global instance needed)"""
+    # Load configuration to verify setup
     print("Loading MemoryOS configuration...", file=sys.stderr)
     config = load_config()
     
-    # Initialize MemoryOS
-    print(f"Initializing MemoryOS for user: {config['user_id']}", file=sys.stderr)
-    memoryos_instance = init_memoryos(config)
-    
-    # Verify initialization by checking memory stats
-    try:
-        stats = memoryos_instance.get_memory_stats()
-        print(f"MemoryOS initialization verified:", file=sys.stderr)
-        print(f"  Short-term memories: {stats.get('short_term', {}).get('total_entries', 0)}", file=sys.stderr)
-        print(f"  User data path: {memoryos_instance.data_storage_path}/{memoryos_instance.user_id}", file=sys.stderr)
-    except Exception as e:
-        print(f"Warning: Could not verify MemoryOS initialization: {e}", file=sys.stderr)
-    
-    print(f"MemoryOS MCP Server started successfully", file=sys.stderr)
-    print(f"User: {config['user_id']}, Assistant: {config['assistant_id']}", file=sys.stderr)
+    print(f"🔐 MemoryOS MCP Server started with USER ISOLATION", file=sys.stderr)
+    print(f"🔐 Each API key/session gets isolated memory instances", file=sys.stderr)
     print(f"Data storage: {config['data_storage_path']}", file=sys.stderr)
     print(f"LLM model: {config['llm_model']}, Embedding model: {config['embedding_model']}", file=sys.stderr)
     
@@ -678,7 +908,7 @@ async def add_memory(
     meta_data: Optional[Dict[str, Any]] = None
 ) -> MemoryOperationResult:
     """
-    Add a new memory entry to MemoryOS system.
+    Add a new memory entry to MemoryOS system with user isolation.
     
     Stores conversation pairs (user input + agent response) in the hierarchical memory system
     for building persistent dialogue history and contextual understanding.
@@ -692,16 +922,18 @@ async def add_memory(
     Returns:
         MemoryOperationResult with operation status and details
     """
-    global memoryos_instance
-    
-    if memoryos_instance is None:
-        return MemoryOperationResult(
-            status="error",
-            message="MemoryOS is not initialized. Check configuration and restart server.",
-            timestamp=datetime.now().isoformat()
-        )
-    
     try:
+        # Get user ID from current session - ensures isolation
+        if not streamable_server.current_session_id:
+            return MemoryOperationResult(
+                status="error",
+                message="No active session. User isolation requires session context.",
+                timestamp=datetime.now().isoformat()
+            )
+        
+        user_id = get_user_id_from_session(streamable_server.current_session_id)
+        memoryos_instance = get_memoryos_for_user(user_id)
+        
         # Validate inputs
         if not user_input or not user_input.strip():
             return MemoryOperationResult(
@@ -717,7 +949,7 @@ async def add_memory(
                 timestamp=datetime.now().isoformat()
             )
         
-        # Add memory to MemoryOS
+        # Add memory to user's specific MemoryOS instance
         result = memoryos_instance.add_memory(
             user_input=user_input.strip(),
             agent_response=agent_response.strip(),
@@ -728,9 +960,10 @@ async def add_memory(
         if result.get("status") == "success":
             return MemoryOperationResult(
                 status="success",
-                message="Memory successfully added to MemoryOS hierarchical storage",
+                message=f"Memory successfully added to isolated MemoryOS for user {user_id}",
                 timestamp=datetime.now().isoformat(),
                 details={
+                    "user_id": user_id,
                     "user_input_length": len(user_input),
                     "agent_response_length": len(agent_response),
                     "has_meta_data": meta_data is not None,
@@ -759,7 +992,7 @@ async def retrieve_memory(
     max_results: int = 10
 ) -> MemoryRetrievalResult:
     """
-    Retrieve relevant memories and context from MemoryOS system.
+    Retrieve relevant memories and context from MemoryOS system with user isolation.
     
     Searches across all memory layers (short-term, mid-term, long-term) using semantic similarity
     to find relevant conversation history, user knowledge, and assistant knowledge.
@@ -773,22 +1006,25 @@ async def retrieve_memory(
     Returns:
         MemoryRetrievalResult with comprehensive memory context
     """
-    global memoryos_instance
-    
-    if memoryos_instance is None:
-        return MemoryRetrievalResult(
-            status="error",
-            query=query,
-            timestamp=datetime.now().isoformat(),
-            user_profile="MemoryOS not initialized",
-            short_term_memory=[],
-            short_term_count=0,
-            retrieved_pages=[],
-            retrieved_user_knowledge=[],
-            retrieved_assistant_knowledge=[]
-        )
-    
     try:
+        # Get user ID from current session - ensures isolation
+        if not streamable_server.current_session_id:
+            return MemoryRetrievalResult(
+                status="error",
+                query=query,
+                timestamp=datetime.now().isoformat(),
+                user_profile="No active session - user isolation required",
+                short_term_memory=[],
+                short_term_count=0,
+                retrieved_pages=[],
+                retrieved_user_knowledge=[],
+                retrieved_assistant_knowledge=[]
+            )
+        
+        user_id = get_user_id_from_session(streamable_server.current_session_id)
+        memoryos_instance = get_memoryos_for_user(user_id)
+        
+        # Validate query
         if not query or not query.strip():
             return MemoryRetrievalResult(
                 status="error",
@@ -895,7 +1131,7 @@ async def get_user_profile(
     include_assistant_knowledge: bool = False
 ) -> UserProfileResult:
     """
-    Get comprehensive user profile and knowledge information.
+    Get comprehensive user profile and knowledge information with user isolation.
     
     Retrieves user profile analysis based on conversation history, including personality traits,
     preferences, and optionally associated knowledge entries.
@@ -907,18 +1143,21 @@ async def get_user_profile(
     Returns:
         UserProfileResult with user profile and optional knowledge entries
     """
-    global memoryos_instance
-    
-    if memoryos_instance is None:
-        return UserProfileResult(
-            status="error",
-            timestamp=datetime.now().isoformat(),
-            user_id="unknown",
-            assistant_id="unknown",
-            user_profile="MemoryOS is not initialized. Check configuration and restart server."
-        )
-    
     try:
+        # Get user ID from current session - ensures isolation
+        if not streamable_server.current_session_id:
+            return UserProfileResult(
+                status="error",
+                timestamp=datetime.now().isoformat(),
+                user_id="unknown",
+                assistant_id="unknown",
+                user_profile="No active session - user isolation required."
+            )
+        
+        user_id = get_user_id_from_session(streamable_server.current_session_id)
+        memoryos_instance = get_memoryos_for_user(user_id)
+        
+        # Get user profile and knowledge
         # Get user profile summary
         user_profile = memoryos_instance.get_user_profile_summary()
         if not user_profile or user_profile.lower() == "none":

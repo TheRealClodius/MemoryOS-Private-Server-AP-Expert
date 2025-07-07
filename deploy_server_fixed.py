@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 MemoryOS Deployment Server - SECURITY FIXED VERSION
 HTTP server for Replit deployment with proper user isolation and data security
@@ -5,10 +6,14 @@ HTTP server for Replit deployment with proper user isolation and data security
 
 import os
 import json
+import asyncio
+import signal
+import logging
 import sys
 import uuid
+from contextlib import asynccontextmanager
+from typing import Any, Dict, List, Optional
 from datetime import datetime
-from typing import Dict, Any, Optional
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -18,11 +23,16 @@ import uvicorn
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from memoryos.memoryos import Memoryos
 
-app = FastAPI(title="MemoryOS Server", version="1.0.0")
-
 # Global configuration cache
 _global_config = None
 _user_instances = {}
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 def load_config(config_path: str = "config.json") -> Dict[str, Any]:
     """Load configuration from file with environment variable fallbacks"""
@@ -103,7 +113,6 @@ def get_memoryos_for_user(user_id: str, assistant_id: str = "mcp_assistant") -> 
     except Exception as e:
         raise RuntimeError(f"Failed to initialize MemoryOS for user {user_id}: {str(e)}")
 
-@app.on_event("startup")
 async def startup_event():
     """Initialize default configuration on startup"""
     try:
@@ -114,6 +123,13 @@ async def startup_event():
     except Exception as e:
         print(f"Failed to load configuration: {e}", file=sys.stderr)
         raise
+
+# Create FastAPI app with proper startup handling
+app = FastAPI(
+    title="MemoryOS Server", 
+    version="1.0.0",
+    on_startup=[startup_event]
+)
 
 @app.get("/")
 async def health_check():
@@ -399,7 +415,24 @@ async def get_user_info_endpoint(
             }
         )
 
+# Main deployment function for direct execution
+def main():
+    """Main deployment entry point"""
+    # Get port from environment, default to 5000 for Replit deployment
+    port = int(os.getenv("PORT", "5000"))
+    
+    print(f"Starting MemoryOS HTTP API server on port {port} with USER ISOLATION SECURITY", file=sys.stderr)
+    print(f"Health check endpoint: http://0.0.0.0:{port}/", file=sys.stderr)
+    print(f"API endpoints: http://0.0.0.0:{port}/api/", file=sys.stderr)
+    
+    # Run the server on 0.0.0.0 for external access
+    uvicorn.run(
+        app, 
+        host="0.0.0.0", 
+        port=port,
+        log_level="info",
+        access_log=True
+    )
+
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5000))
-    print(f"Starting MemoryOS HTTP server on port {port} with USER ISOLATION SECURITY", file=sys.stderr)
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    main()

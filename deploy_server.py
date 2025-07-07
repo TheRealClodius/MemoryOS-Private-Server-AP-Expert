@@ -23,9 +23,8 @@ import uvicorn
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from memoryos.memoryos import Memoryos
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
+async def startup_event():
+    """Initialize default configuration on startup"""
     try:
         # Just load config to validate it
         config = load_config()
@@ -34,13 +33,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"Failed to load configuration: {e}", file=sys.stderr)
         raise
-    
-    yield
-    
-    # Shutdown
-    print("MemoryOS server shutting down", file=sys.stderr)
 
-app = FastAPI(title="MemoryOS Server", version="1.0.0", lifespan=lifespan)
+app = FastAPI(
+    title="MemoryOS Server", 
+    version="1.0.0",
+    on_startup=[startup_event]
+)
 
 # Global configuration cache
 _global_config = None
@@ -131,8 +129,6 @@ def get_memoryos_for_user(user_id: str, assistant_id: str = "mcp_assistant") -> 
         
     except Exception as e:
         raise RuntimeError(f"Failed to initialize MemoryOS for user {user_id}: {str(e)}")
-
-# Startup event moved to lifespan context manager above
 
 @app.get("/")
 async def health_check():
@@ -316,7 +312,7 @@ async def get_user_profile_endpoint(
         server = get_memoryos_for_user(user_id, assistant_id)
         
         # Get profile for the specific user only
-        user_profile = server.get_user_profile()
+        user_profile = server.get_user_profile_summary()
         
         return {
             "status": "success",

@@ -626,6 +626,10 @@ async def init_server():
     
     return config
 
+async def initialize_memoryos():
+    """Initialize MemoryOS instance for MCP server"""
+    await init_server()
+
 async def run_streamable_http_server():
     """Run the StreamableHTTP MCP server"""
     try:

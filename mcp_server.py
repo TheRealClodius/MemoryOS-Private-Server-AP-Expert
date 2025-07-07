@@ -371,9 +371,9 @@ class StreamableHTTPMCPServer:
         """Setup MCP protocol handlers"""
         
         @self.server.list_tools()
-        async def list_tools() -> List[ToolInfo]:
+        async def list_tools() -> List[Tool]:
             return [
-                ToolInfo(
+                Tool(
                     name="add_memory",
                     description="Add a new memory to the MemoryOS system",
                     inputSchema={
@@ -387,7 +387,7 @@ class StreamableHTTPMCPServer:
                         "required": ["user_input", "agent_response"]
                     }
                 ),
-                ToolInfo(
+                Tool(
                     name="retrieve_memory",
                     description="Retrieve relevant memories from MemoryOS",
                     inputSchema={
@@ -400,7 +400,7 @@ class StreamableHTTPMCPServer:
                         "required": ["query"]
                     }
                 ),
-                ToolInfo(
+                Tool(
                     name="get_user_profile",
                     description="Get comprehensive user profile information",
                     inputSchema={

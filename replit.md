@@ -79,6 +79,20 @@ The system follows a modular, layered architecture with clear separation of conc
 
 ## Recent Changes
 
+✅ **July 07, 2025 - Critical Deployment Fixes Applied**
+- **DEPLOYMENT CRASH LOOP RESOLVED**: Fixed ToolInfo import error causing server failures
+- **Problem**: ToolInfo class deprecated in MCP SDK, causing undefined variable errors
+- **Solution**: Updated all ToolInfo references to use Tool class from mcp.types
+- **FastAPI Lifecycle Fix**: Replaced deprecated @app.on_event with modern lifespan context manager
+- **Port Configuration**: Verified correct binding on 0.0.0.0:5000 for deployment
+- **Server Startup**: Fixed crash loop and connection refused errors
+- **VERIFIED WORKING**: 
+  - Health check endpoints (/ and /health) responding correctly
+  - API endpoints functional (add_memory tested successfully)
+  - Server running stable on port 5000
+  - User isolation security working properly
+- **Deployment Status**: Ready for production deployment
+
 ✅ **July 06, 2025 - MEMORY TIER ARCHITECTURE FIX: Redis-Style Short-Term Memory**
 - **ARCHITECTURE ISSUE RESOLVED**: Fixed incorrect memory tier implementation to match original MemoryOS design
 - **Problem**: Short-term memory was using complex JSON file storage and indexing (like mid/long-term)

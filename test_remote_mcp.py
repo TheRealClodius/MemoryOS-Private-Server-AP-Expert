@@ -13,7 +13,7 @@ async def test_remote_server():
     # Connect to MCP server using Streamable HTTP transport
     # For local testing: http://localhost:5000/mcp
     # For Cloud Run with proxy: http://localhost:8080/mcp
-    server_url = "http://localhost:5000/mcp"
+    server_url = "http://localhost:5001/mcp"
     
     print("🧪 Testing MemoryOS Remote MCP Server")
     print(f"🔗 Connecting to: {server_url}")

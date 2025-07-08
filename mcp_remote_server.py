@@ -6,8 +6,10 @@ Based on Google Cloud Run MCP deployment guidelines
 """
 
 import asyncio
+import json
 import logging
 import os
+import secrets
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -18,6 +20,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from fastmcp import FastMCP
 from pydantic import BaseModel, Field
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 # Import our MemoryOS components
 from memoryos.memoryos import Memoryos
@@ -26,8 +31,74 @@ from memoryos.memoryos import Memoryos
 logger = logging.getLogger(__name__)
 logging.basicConfig(format="[%(levelname)s]: %(message)s", level=logging.INFO)
 
-# Initialize FastMCP server with proper naming for MCP 2.0
+# API Key Authentication
+class APIKeyAuthMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app, valid_api_keys: Dict[str, str]):
+        super().__init__(app)
+        self.valid_api_keys = valid_api_keys
+        
+    async def dispatch(self, request: Request, call_next):
+        # Skip auth for health checks and docs
+        if request.url.path in ["/", "/health", "/docs", "/openapi.json"]:
+            return await call_next(request)
+            
+        # Extract API key from headers
+        api_key = None
+        auth_header = request.headers.get("authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            api_key = auth_header[7:]
+        elif "x-api-key" in request.headers:
+            api_key = request.headers["x-api-key"]
+            
+        # Validate API key
+        if not api_key or api_key not in self.valid_api_keys:
+            return JSONResponse(
+                status_code=401,
+                content={"error": "Invalid or missing API key"}
+            )
+            
+        # Add user info to request state
+        request.state.api_key_info = self.valid_api_keys[api_key]
+        return await call_next(request)
+
+# Load API keys from environment or config
+def load_api_keys() -> Dict[str, str]:
+    """Load API keys from environment variables or config file"""
+    api_keys = {}
+    
+    # Try to load from config file
+    config_file = Path("config.json")
+    if config_file.exists():
+        try:
+            with open(config_file) as f:
+                config_data = json.load(f)
+                api_keys.update(config_data.get("api_keys", {}))
+        except Exception as e:
+            logger.warning(f"Could not load config.json: {e}")
+    
+    # Load from environment variables
+    env_api_key = os.getenv("MCP_API_KEY")
+    if env_api_key:
+        api_keys[env_api_key] = {"user": "env_user", "description": "Environment API key"}
+    
+    # Generate default key if none exist
+    if not api_keys:
+        default_key = secrets.token_urlsafe(32)
+        api_keys[default_key] = {"user": "default_user", "description": "Auto-generated default key"}
+        logger.warning(f"Generated default API key: {default_key}")
+        
+        # Save to config file
+        config_data = {"api_keys": api_keys}
+        with open("config.json", "w") as f:
+            json.dump(config_data, f, indent=2)
+    
+    return {key: info for key, info in api_keys.items()}
+
+# Initialize FastMCP server 
 mcp = FastMCP("MemoryOS Remote MCP Server")
+
+# Load API keys
+valid_api_keys = load_api_keys()
 
 # Global configuration
 config = {
@@ -249,6 +320,24 @@ if __name__ == "__main__":
     logger.info(f"🚀 MemoryOS Remote MCP Server starting on port {port}")
     logger.info(f"🔧 Configuration: {config['llm_model']} + {config['embedding_model']}")
     logger.info(f"📁 Data storage: {config['data_storage_path']}")
+    logger.info(f"🔑 Loaded {len(valid_api_keys)} API key(s)")
+    
+    # Show API keys for development (remove in production)
+    for key, info in valid_api_keys.items():
+        logger.info(f"   API Key: {key[:8]}... (user: {info.get('user', 'unknown')})")
+    
+    # Create custom app with authentication
+    from fastapi import FastAPI, HTTPException, Security, Depends
+    from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+    from fastapi.middleware.cors import CORSMiddleware
+    
+    # Custom authentication function
+    security = HTTPBearer()
+    
+    async def verify_api_key(credentials: HTTPAuthorizationCredentials = Security(security)):
+        if credentials.credentials not in valid_api_keys:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        return credentials.credentials
     
     # Run with streamable-http transport (MCP 2.0 standard)
     # host="0.0.0.0" required for Cloud Run and Docker deployments

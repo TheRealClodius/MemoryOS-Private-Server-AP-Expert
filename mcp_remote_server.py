@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 MemoryOS Remote MCP 2.0 Server using FastMCP
-Fully compliant with MCP 2.0 Streamable HTTP Transport specification
-Based on Google Cloud Run MCP deployment guidelines
+Aligned with MCP 2.0 JSON-RPC specification for nested parameter structure
+Compatible with client MCP 2.0 implementations using "params" wrapper
 """
 
 import asyncio
@@ -30,6 +30,28 @@ logging.basicConfig(format="[%(levelname)s]: %(message)s", level=logging.INFO)
 
 # Initialize FastMCP server with standard MCP protocol compliance
 mcp = FastMCP("MemoryOS Remote MCP Server")
+
+# MCP 2.0 Parameter Extraction Helper
+def extract_mcp_2_0_params(arguments: dict) -> dict:
+    """Extract parameters from MCP 2.0 nested structure or direct format"""
+    if "params" in arguments:
+        # MCP 2.0 client format: {"arguments": {"params": {...}}}
+        return arguments["params"]
+    else:
+        # Direct format: {"arguments": {...}}
+        return arguments
+
+# Custom tool wrapper for MCP 2.0 compatibility
+def mcp_2_0_tool(func):
+    """Decorator to handle MCP 2.0 parameter extraction"""
+    def wrapper(**kwargs):
+        # Extract parameters from MCP 2.0 structure if needed
+        if len(kwargs) == 1 and "arguments" in kwargs:
+            actual_params = extract_mcp_2_0_params(kwargs["arguments"])
+            return func(**actual_params)
+        else:
+            return func(**kwargs)
+    return wrapper
 
 # Load API keys from environment or config
 def load_api_keys() -> Dict[str, str]:
@@ -205,11 +227,9 @@ def retrieve_memory(query: str, user_id: str, relationship_with_user: str = "ass
         memoryos_instance = get_memoryos_for_user(user_id)
         
         # Retrieve memories using MemoryOS
-        result = memoryos_instance.retriever.retrieve_memory(
-            query=query,
-            relationship_with_user=relationship_with_user,
-            style_hint=style_hint,
-            max_results=max_results
+        result = memoryos_instance.retriever.retrieve_context(
+            user_query=query,
+            user_id=user_id
         )
         
         return {

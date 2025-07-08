@@ -13,17 +13,19 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 def main():
     """Main entry point for deployment"""
-    # Import the FastAPI app
-    from deploy_server import app
+    # Set your API key for deployment
+    if not os.getenv("MCP_API_KEY"):
+        os.environ["MCP_API_KEY"] = "XJF85yFOuIglJTXQBXScOMjPVkgmTDPsZtkdkexCjZ8"
     
-    # Get port from environment
+    # Set port from environment
     port = int(os.getenv("PORT", "5000"))
-    
     print(f"Starting MemoryOS MCP Server on port {port}", file=sys.stderr)
-    print(f"Health check endpoint: http://0.0.0.0:{port}/", file=sys.stderr)
-    print(f"API endpoints: http://0.0.0.0:{port}/api/", file=sys.stderr)
+    print(f"Using API Key: {os.getenv('MCP_API_KEY')[:8]}...", file=sys.stderr)
     
-    # Run the server
+    # Import and run MCP server directly
+    from mcp_server import app
+    
+    # Run the MCP server with authentication
     uvicorn.run(
         app,
         host="0.0.0.0",

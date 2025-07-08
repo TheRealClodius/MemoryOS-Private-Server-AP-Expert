@@ -46,8 +46,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "MCP_API_KEY=\"TFlAmKQYtaoyDcFii3E5BXNtKLYloT_aDjiFTapWRU4\" PORT=5000 python mcp_server.py"
-waitForPort = 5000
+args = "MCP_API_KEY=\"XJF85yFOuIglJTXQBXScOMjPVkgmTDPsZtkdkexCjZ8\" PORT=5000 python mcp_server.py"
 
 [deployment]
 deploymentTarget = "cloudrun"

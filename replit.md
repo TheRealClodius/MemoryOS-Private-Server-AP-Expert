@@ -29,7 +29,7 @@ The system follows a modular, layered architecture with clear separation of conc
 ### Core Services
 - **Memory Retriever** (`retriever.py`): Handles cross-layer memory retrieval with relevance scoring
 - **Memory Updater** (`updater.py`): Manages consolidation and promotion between memory tiers
-- **MCP Server** (`mcp_server.py`): Provides standardized tool interface using FastMCP framework
+- **MCP Server** (`mcp_server.py`): Provides standardized tool interface using pure MCP 2.0 JSON-RPC implementation
 
 ### Storage Strategy
 - **JSON files**: Human-readable storage for memory entries and metadata
@@ -48,8 +48,8 @@ The system follows a modular, layered architecture with clear separation of conc
 
 ### Required Services
 - **OpenAI API**: Text generation (GPT-4o-mini) and embeddings (text-embedding-3-small)
-- **MCP SDK**: Anthropic's Model Context Protocol for standardized tool interfaces
-- **FastMCP**: Framework for simplified MCP server implementation
+- **FastAPI**: Web framework for HTTP server and API endpoints
+- **Pydantic**: Data validation and JSON-RPC request/response models
 
 ### Optional Enhancements
 - **FAISS-GPU**: Hardware-accelerated similarity search for large embedding collections
@@ -68,7 +68,8 @@ The system follows a modular, layered architecture with clear separation of conc
 - **User isolation**: Per-user data directories with configurable storage paths
 
 ### MCP Integration
-- **STDIO transport**: Standard input/output communication with MCP clients
+- **HTTP transport**: JSON-RPC 2.0 over HTTP for remote client communication
+- **Bearer authentication**: Secure API key-based client authentication
 - **Structured returns**: Pydantic models ensure consistent tool response formats
 - **Error handling**: Comprehensive error catching with user-friendly messages
 
@@ -78,6 +79,20 @@ The system follows a modular, layered architecture with clear separation of conc
 - **Heat-based cleanup**: Automatic consolidation reduces memory footprint over time
 
 ## Recent Changes
+
+✅ **July 08, 2025 - Documentation Sync & README.md Contradictions Fixed**
+- **DOCUMENTATION ISSUE RESOLVED**: Fixed major contradictions in README.md with pure MCP 2.0 implementation
+- **Problem**: README.md still referenced old REST API endpoints (`/api/add_memory`, `/api/retrieve_memory`) and deprecated files (`deploy_server`, `mcp_remote_server`)
+- **Solution**: Complete README.md rewrite to align with pure MCP 2.0 JSON-RPC specification
+- **Key Changes**:
+  - Replaced REST API examples with MCP 2.0 JSON-RPC format
+  - Updated all curl examples to use `/mcp/` endpoint with Bearer authentication
+  - Fixed deployment commands to reference `mcp_server.py` instead of deprecated files
+  - Added proper MCP 2.0 protocol examples (initialize, tools/list, tools/call)
+  - Updated response format examples to show JSON-RPC 2.0 structure
+- **Authentication**: All examples now include Bearer token `77gOCTIGuZLslr-vIk8uTsWF0PZmMgyU8RxMKn_VZd4`
+- **Parameter Format**: Documentation now shows correct nested MCP 2.0 format: `{"arguments": {"params": {...}}}`
+- **VERIFIED**: README.md now fully aligned with current pure MCP 2.0 implementation
 
 ✅ **July 08, 2025 - Pure MCP 2.0 Remote Server Implementation**
 - **ARCHITECTURE CHANGE**: Replaced FastMCP with pure MCP 2.0 JSON-RPC implementation
@@ -211,29 +226,32 @@ The system follows a modular, layered architecture with clear separation of conc
 - Updated documentation to emphasize secure API key management
 
 ✅ **July 05, 2025 - Complete MCP Server Implementation & Full Testing**
-- Implemented full MemoryOS MCP server with FastMCP framework
+- Implemented full MemoryOS MCP server with pure JSON-RPC 2.0 specification
 - Created three production-ready MCP tools: add_memory, retrieve_memory, get_user_profile
 - Integrated complete hierarchical memory architecture (short/mid/long-term)
 - Added FAISS-CPU vector search and OpenAI embeddings support
-- Configured structured Pydantic responses following MCP 1.2.0+ standards
-- Successfully installed all dependencies: mcp, openai, numpy, faiss-cpu, pydantic
+- Configured structured Pydantic responses following MCP 2.0 standards
+- Successfully installed all dependencies: fastapi, uvicorn, openai, numpy, faiss-cpu, pydantic
 - **COMPLETED FULL FUNCTIONALITY TESTING**: All MCP tools working with live OpenAI API
 - Validated memory addition, retrieval, and user profiling with real data
 - Created comprehensive deployment documentation and production guide
 
 ## Deployment Status
 
-🚀 **DEPLOYMENT READY - ALL ISSUES RESOLVED**
+🚀 **DEPLOYMENT READY - PURE MCP 2.0 IMPLEMENTATION**
 - **Health Check Endpoints**: Both / and /health endpoints operational and returning proper status
-- **HTTP Server**: FastAPI server running on port 5000 with external access (0.0.0.0)
-- **API Endpoints**: All three endpoints working correctly:
-  - POST /api/add_memory - Successfully adds memories
-  - GET /api/retrieve_memory - Retrieves relevant memories with semantic search
-  - GET /api/user_profile - Returns user profile information
-- **Environment Configuration**: Proper port binding and environment variable handling
+- **Pure MCP 2.0 Server**: FastAPI server running on port 5000 with external access (0.0.0.0)
+- **MCP Protocol Endpoints**: Standards-compliant JSON-RPC 2.0 implementation:
+  - POST /mcp/ - Main MCP JSON-RPC endpoint with Bearer authentication
+  - Initialize/initialized handshake working correctly
+  - tools/list and tools/call methods operational
+  - All three tools: add_memory, retrieve_memory, get_user_profile
+- **Authentication**: Bearer token system with API key `77gOCTIGuZLslr-vIk8uTsWF0PZmMgyU8RxMKn_VZd4`
+- **User Isolation**: Complete per-user memory instances and data separation
+- **Parameter Support**: Both MCP 2.0 nested and direct parameter formats
 - **Memory Operations**: All memory tiers (short/mid/long-term) functional
 - **OpenAI Integration**: Embeddings and LLM calls working with API key configuration
-- **Deployment Files**: main.py, deploy_server.py, and run.py configured for production
+- **Deployment File**: mcp_server.py configured for production
 - Ready for immediate Replit deployment
 
 ## User Preferences

@@ -22,8 +22,8 @@ def main():
     print(f"Starting MemoryOS MCP Server on port {port}", file=sys.stderr)
     print(f"Using API Key: {os.getenv('MCP_API_KEY')[:8]}...", file=sys.stderr)
     
-    # Import and run remote MCP server for deployment
-    from mcp_remote_server import app
+    # Import and run pure MCP 2.0 server for deployment
+    from mcp_server import app
     
     # Run the MCP server with authentication
     uvicorn.run(

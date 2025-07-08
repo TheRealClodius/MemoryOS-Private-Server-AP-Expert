@@ -37,7 +37,7 @@ MemoryOS is a sophisticated memory management system for AI agents that mimics h
 - **🗂️ File System Isolation**: Users get separate data directories (`./memoryos_data/user_id/`)
 - **🔑 Session-Based Security**: Each session maps to specific user ID with no cross-contamination
 - **🌐 HTTP API Deployment**: Ready for production deployment with health checks
-- **🔧 MCP Protocol Compliance**: Works seamlessly with Claude Desktop and other MCP clients
+- **🔧 Pure MCP 2.0 Protocol**: Standards-compliant JSON-RPC implementation for seamless client integration
 - **📈 Comprehensive Monitoring**: Health checks, performance metrics, and detailed logging
 - **🛡️ Security Hardened**: Environment variable configuration, input validation, and data protection
 
@@ -132,94 +132,171 @@ MemoryOS implements a sophisticated three-tier memory hierarchy inspired by oper
 
 5. **Start the server:**
    ```bash
-   # For MCP client integration (Claude Desktop)
+   # Start pure MCP 2.0 server
    python mcp_server.py
    
-   # For HTTP API deployment (production)
-   python run.py
+   # Or use main entry point
+   python main.py
    ```
 
 ### Deployment Options
 
-**Option 1: MCP Server (for Claude Desktop)**
-- Runs on stdio transport for direct MCP client integration
-- Ideal for personal use with Claude Desktop
-- Lightweight and fast
+**Pure MCP 2.0 Remote Server**
+- Runs on port 5000 with JSON-RPC 2.0 over HTTP
+- Standards-compliant MCP 2.0 protocol implementation
+- Bearer token authentication for secure access
+- Complete user isolation with per-user memory instances
+- Health checks and monitoring endpoints
+- Ready for production deployment
 
-**Option 2: HTTP API Server (for production)**
-- Runs on port 5000 with FastAPI
-- Includes health checks and monitoring endpoints
-- Ready for production deployment with proper user isolation
-
-## 🔧 API Reference
+## 🔧 MCP 2.0 Protocol Reference
 
 ### Health Check Endpoints
 
 ```bash
-# Basic health check
+# Basic server information
 curl http://localhost:5000/
 
 # Detailed health status
 curl http://localhost:5000/health
 ```
 
-### Memory Management API
+### MCP 2.0 JSON-RPC API
 
-#### Add Memory
+All MCP operations use the `/mcp/` endpoint with Bearer authentication:
+
+#### Authentication
 ```bash
-curl -X POST http://localhost:5000/api/add_memory \
+# All requests require Bearer token
+-H "Authorization: Bearer 77gOCTIGuZLslr-vIk8uTsWF0PZmMgyU8RxMKn_VZd4"
+```
+
+#### Initialize MCP Session
+```bash
+curl -X POST http://localhost:5000/mcp/ \
+  -H "Authorization: Bearer 77gOCTIGuZLslr-vIk8uTsWF0PZmMgyU8RxMKn_VZd4" \
   -H "Content-Type: application/json" \
   -d '{
-    "user_id": "alice",
-    "user_input": "I love working with Python",
-    "agent_response": "That's great! Python is excellent for data science and AI projects."
+    "jsonrpc": "2.0",
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2024-11-05",
+      "capabilities": {"tools": {}},
+      "clientInfo": {"name": "CustomClient", "version": "1.0.0"}
+    },
+    "id": 1
   }'
 ```
 
-#### Retrieve Relevant Memories
+#### List Available Tools
 ```bash
-curl "http://localhost:5000/api/retrieve_memory?user_id=alice&query=Python%20programming"
-```
-
-#### Get User Profile
-```bash
-curl "http://localhost:5000/api/user_profile?user_id=alice&include_knowledge=true"
-```
-
-#### Create New User
-```bash
-curl -X POST http://localhost:5000/api/create_user \
+curl -X POST http://localhost:5000/mcp/ \
+  -H "Authorization: Bearer 77gOCTIGuZLslr-vIk8uTsWF0PZmMgyU8RxMKn_VZd4" \
   -H "Content-Type: application/json" \
-  -d '{"user_id": "bob"}'
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/list",
+    "params": {},
+    "id": 2
+  }'
+```
+
+#### Add Memory (MCP 2.0 Format)
+```bash
+curl -X POST http://localhost:5000/mcp/ \
+  -H "Authorization: Bearer 77gOCTIGuZLslr-vIk8uTsWF0PZmMgyU8RxMKn_VZd4" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "add_memory",
+      "arguments": {
+        "params": {
+          "user_input": "I love working with Python",
+          "agent_response": "That'\''s great! Python is excellent for data science and AI projects.",
+          "user_id": "alice_2024"
+        }
+      }
+    },
+    "id": 3
+  }'
+```
+
+#### Retrieve Memory (MCP 2.0 Format)
+```bash
+curl -X POST http://localhost:5000/mcp/ \
+  -H "Authorization: Bearer 77gOCTIGuZLslr-vIk8uTsWF0PZmMgyU8RxMKn_VZd4" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "retrieve_memory",
+      "arguments": {
+        "params": {
+          "query": "Python programming",
+          "user_id": "alice_2024"
+        }
+      }
+    },
+    "id": 4
+  }'
+```
+
+#### Get User Profile (MCP 2.0 Format)
+```bash
+curl -X POST http://localhost:5000/mcp/ \
+  -H "Authorization: Bearer 77gOCTIGuZLslr-vIk8uTsWF0PZmMgyU8RxMKn_VZd4" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "get_user_profile",
+      "arguments": {
+        "params": {
+          "user_id": "alice_2024"
+        }
+      }
+    },
+    "id": 5
+  }'
 ```
 
 ### Response Examples
 
-**Successful Memory Addition:**
+**MCP 2.0 Response Format:**
 ```json
 {
-  "status": "success",
-  "message": "Memory added successfully",
-  "user_id": "alice", 
-  "timestamp": "2025-07-06T19:30:45.123456"
+  "jsonrpc": "2.0",
+  "id": 3,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"status\":\"success\",\"message\":\"Memory added successfully\",\"user_id\":\"alice_2024\",\"timestamp\":\"2025-07-08T10:30:00Z\"}"
+      }
+    ],
+    "isError": false
+  }
 }
 ```
 
-**Memory Retrieval:**
+**Memory Retrieval Response:**
 ```json
 {
-  "status": "success",
-  "query": "Python programming",
-  "user_profile": "Alice is interested in programming and data science...",
-  "short_term_memory": [
-    {
-      "user_input": "I love working with Python",
-      "agent_response": "That's great! Python is excellent...",
-      "timestamp": "2025-07-06T19:30:45.123456"
-    }
-  ],
-  "retrieved_pages": [],
-  "retrieved_user_knowledge": []
+  "jsonrpc": "2.0",
+  "id": 4,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"status\":\"success\",\"query\":\"Python programming\",\"user_id\":\"alice_2024\",\"result\":{\"user_profile\":\"Alice is interested in programming...\",\"short_term_memory\":[...]}}"
+      }
+    ],
+    "isError": false
+  }
 }
 ```
 
@@ -479,11 +556,11 @@ python test_embedding_issue.py
 ### Debug Mode
 ```bash
 # Enable detailed logging
-export MEMORYOS_LOG_LEVEL="DEBUG"
-python run.py
+export MEMORYOS_LOG_LEVEL="DEBUG" 
+python mcp_server.py
 
 # Save debug output
-python run.py 2>&1 | tee debug.log
+python mcp_server.py 2>&1 | tee debug.log
 ```
 
 ## 📁 Data Storage Structure
@@ -555,7 +632,7 @@ python simple_memory_test.py
 PORT=5000 python run.py
 
 # With process management
-gunicorn --bind 0.0.0.0:5000 --workers 4 deploy_server:app
+python mcp_server.py
 
 # Docker deployment (if needed)
 docker build -t memoryos .
@@ -568,7 +645,11 @@ docker run -p 5000:5000 -e OPENAI_API_KEY=$OPENAI_API_KEY memoryos
 curl http://localhost:5000/health
 
 # Monitor performance
-curl "http://localhost:5000/api/user_info?user_id=alice"
+# Test MCP 2.0 authentication
+curl -X POST http://localhost:5000/mcp/ \
+  -H "Authorization: Bearer 77gOCTIGuZLslr-vIk8uTsWF0PZmMgyU8RxMKn_VZd4" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","params":{},"id":1}'
 
 # Automated health checks
 while true; do

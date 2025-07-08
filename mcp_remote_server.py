@@ -31,35 +31,8 @@ from memoryos.memoryos import Memoryos
 logger = logging.getLogger(__name__)
 logging.basicConfig(format="[%(levelname)s]: %(message)s", level=logging.INFO)
 
-# API Key Authentication
-class APIKeyAuthMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, valid_api_keys: Dict[str, str]):
-        super().__init__(app)
-        self.valid_api_keys = valid_api_keys
-        
-    async def dispatch(self, request: Request, call_next):
-        # Skip auth for health checks and docs
-        if request.url.path in ["/", "/health", "/docs", "/openapi.json"]:
-            return await call_next(request)
-            
-        # Extract API key from headers
-        api_key = None
-        auth_header = request.headers.get("authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            api_key = auth_header[7:]
-        elif "x-api-key" in request.headers:
-            api_key = request.headers["x-api-key"]
-            
-        # Validate API key
-        if not api_key or api_key not in self.valid_api_keys:
-            return JSONResponse(
-                status_code=401,
-                content={"error": "Invalid or missing API key"}
-            )
-            
-        # Add user info to request state
-        request.state.api_key_info = self.valid_api_keys[api_key]
-        return await call_next(request)
+# Authentication will be handled at the FastMCP server level
+# No need for tool-level decorators since FastMCP manages the request pipeline
 
 # Load API keys from environment or config
 def load_api_keys() -> Dict[str, str]:
@@ -130,7 +103,7 @@ def get_memoryos_for_user(user_id: str) -> Memoryos:
         user_config["data_storage_path"] = str(user_data_path)
         
         # Initialize MemoryOS instance
-        user_memory_instances[user_id] = Memoryos(config_path=None, config_dict=user_config)
+        user_memory_instances[user_id] = Memoryos(config_dict=user_config)
         
     return user_memory_instances[user_id]
 

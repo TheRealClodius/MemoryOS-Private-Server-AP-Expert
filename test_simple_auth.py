@@ -27,7 +27,7 @@ async def test_simple_auth():
         print("config.json not found")
         return
     
-    server_url = "http://localhost:5001/mcp"
+    server_url = "http://localhost:5000/mcp/"
     
     print("Testing API Key Authentication")
     print(f"Server: {server_url}")
@@ -36,7 +36,11 @@ async def test_simple_auth():
     async with httpx.AsyncClient() as client:
         # Test 1: Valid API key
         print("Testing with valid API key...")
-        headers = {"Authorization": f"Bearer {test_api_key}"}
+        headers = {
+            "Authorization": f"Bearer {test_api_key}",
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json"
+        }
         
         response = await client.post(
             server_url,
@@ -63,7 +67,11 @@ async def test_simple_auth():
         
         # Test 2: Invalid API key
         print("Testing with invalid API key...")
-        invalid_headers = {"Authorization": "Bearer invalid_key_123"}
+        invalid_headers = {
+            "Authorization": "Bearer invalid_key_123",
+            "Accept": "application/json, text/event-stream", 
+            "Content-Type": "application/json"
+        }
         
         response = await client.post(
             server_url,

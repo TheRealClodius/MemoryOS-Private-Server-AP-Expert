@@ -527,12 +527,27 @@ async def handle_mcp_request(
     request: Request, 
     api_key: str = Depends(get_api_key)
 ) -> JSONResponse:
-    """Handle authenticated MCP JSON-RPC requests via StreamableHTTP"""
+    """Handle authenticated MCP JSON-RPC requests via Streamable HTTP Transport (MCP 2.0)"""
     try:
         # Log authenticated request
         key_info = security_config.validate_api_key(api_key)
         if key_info:
             print(f"🔐 Authenticated request from: {key_info['name']}", file=sys.stderr)
+        
+        # MCP 2.0 Session Management with Mcp-Session-Id header
+        session_id = request.headers.get("Mcp-Session-Id")
+        if not session_id:
+            session_id = f"mcp_{secrets.token_urlsafe(16)}"
+        
+        # Map API key to user ID for isolation
+        user_id = request.headers.get("X-User-ID")
+        if not user_id:
+            # Use API key name as default user ID for isolation
+            user_id = key_info.get("name", f"user_{api_key[:8]}") if key_info else f"user_{api_key[:8]}"
+        
+        # Store session mapping
+        set_user_for_session(session_id, user_id)
+        print(f"🔐 MCP Session {session_id[:12]}... mapped to user {user_id}", file=sys.stderr)
         
         # Parse JSON-RPC request
         body = await request.body()
@@ -541,21 +556,13 @@ async def handle_mcp_request(
         
         json_request = json.loads(body.decode())
         
-        # Map API key to user ID for isolation
-        user_id = request.headers.get("X-User-ID")
-        if not user_id:
-            # Use API key name as default user ID for isolation
-            user_id = key_info.get("name", f"user_{api_key[:8]}") if key_info else f"user_{api_key[:8]}"
-        
-        print(f"🔐 Mapped session {api_key[:8]}... to user {user_id}", file=sys.stderr)
-        
         # Handle MCP request directly
         method = json_request.get("method")
         params = json_request.get("params", {})
         request_id = json_request.get("id")
         
         if method == "initialize":
-            # Return initialization response
+            # MCP 2.0 initialization response with session management
             response = {
                 "jsonrpc": "2.0",
                 "id": request_id,
@@ -685,7 +692,9 @@ async def handle_mcp_request(
                 }
             }
         
-        return JSONResponse(content=response)
+        # Return response with MCP 2.0 session header
+        headers = {"Mcp-Session-Id": session_id}
+        return JSONResponse(content=response, headers=headers)
         
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON")
@@ -698,17 +707,34 @@ async def handle_mcp_sse(
     request: Request,
     api_key: str = Depends(get_api_key)
 ):
-    """Handle authenticated MCP Server-Sent Events (SSE) endpoint"""
-    # SSE implementation would go here
-    raise HTTPException(status_code=501, detail="SSE not implemented yet")
+    """Handle authenticated MCP Server-Sent Events (SSE) endpoint (MCP 2.0 Streamable HTTP)"""
+    from fastapi.responses import StreamingResponse
+    
+    async def event_stream():
+        # Basic SSE headers for MCP 2.0 compatibility
+        yield "data: {\"jsonrpc\": \"2.0\", \"method\": \"notifications/ready\", \"params\": {}}\n\n"
+        
+        # Keep connection alive for potential server-initiated messages
+        while True:
+            await asyncio.sleep(30)  # Heartbeat every 30 seconds
+            yield "data: {\"jsonrpc\": \"2.0\", \"method\": \"notifications/heartbeat\", \"params\": {}}\n\n"
+    
+    headers = {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "Mcp-Session-Id": request.headers.get("Mcp-Session-Id", f"mcp_{secrets.token_urlsafe(16)}")
+    }
+    
+    return StreamingResponse(event_stream(), media_type="text/event-stream", headers=headers)
 
 @app.delete("/mcp")
 async def handle_mcp_disconnect(
     request: Request,
     api_key: str = Depends(get_api_key)
 ):
-    """Handle authenticated MCP session termination"""
-    session_id = request.headers.get("X-Session-ID", f"{api_key[:8]}-default")
+    """Handle authenticated MCP session termination (MCP 2.0)"""
+    session_id = request.headers.get("Mcp-Session-Id", f"{api_key[:8]}-default")
     if session_id in streamable_server.sessions:
         del streamable_server.sessions[session_id]
         print(f"🔐 Session terminated for API key: {api_key[:8]}...", file=sys.stderr)

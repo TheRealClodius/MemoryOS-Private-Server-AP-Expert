@@ -15,15 +15,15 @@ def main():
     """Main entry point for deployment"""
     # Set your API key for deployment
     if not os.getenv("MCP_API_KEY"):
-        os.environ["MCP_API_KEY"] = "XJF85yFOuIglJTXQBXScOMjPVkgmTDPsZtkdkexCjZ8"
+        os.environ["MCP_API_KEY"] = "77gOCTIGuZLslr-vIk8uTsWF0PZmMgyU8RxMKn_VZd4"
     
     # Set port from environment
     port = int(os.getenv("PORT", "5000"))
     print(f"Starting MemoryOS MCP Server on port {port}", file=sys.stderr)
     print(f"Using API Key: {os.getenv('MCP_API_KEY')[:8]}...", file=sys.stderr)
     
-    # Import and run MCP server directly
-    from mcp_server import app
+    # Import and run remote MCP server for deployment
+    from mcp_remote_server import app
     
     # Run the MCP server with authentication
     uvicorn.run(

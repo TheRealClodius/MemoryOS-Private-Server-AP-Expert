@@ -417,16 +417,26 @@ async def get_user_info_endpoint(
 async def deploy_streamable_http():
     """Deploy MemoryOS as a StreamableHTTP MCP server"""
     try:
-        # Import after path setup
-        from mcp_server import run_streamable_http_server
+        # Set the deployment API key
+        if not os.getenv("MCP_API_KEY"):
+            os.environ["MCP_API_KEY"] = "77gOCTIGuZLslr-vIk8uTsWF0PZmMgyU8RxMKn_VZd4"
         
-        logger.info("Starting MemoryOS MCP Server (StreamableHTTP)")
-        logger.info(f"Server URL: http://0.0.0.0:{os.getenv('PORT', '3000')}")
+        # Import the remote MCP server
+        import mcp_remote_server
+        
+        logger.info("Starting MemoryOS Remote MCP Server (StreamableHTTP)")
+        logger.info(f"Server URL: http://0.0.0.0:{os.getenv('PORT', '5000')}")
+        logger.info(f"API Key: {os.getenv('MCP_API_KEY')[:8]}...")
         logger.info("Transport: StreamableHTTP")
-        logger.info("Ready for remote MCP clients")
+        logger.info("Ready for remote MCP clients with authentication")
         
-        # Run the server
-        await run_streamable_http_server()
+        # Run the MCP server directly using its main function
+        port = int(os.getenv("PORT", "5000"))
+        await mcp_remote_server.mcp.run_async(
+            transport="streamable-http",
+            host="0.0.0.0", 
+            port=port,
+        )
         
     except KeyboardInterrupt:
         logger.info("Shutting down server...")

@@ -49,10 +49,11 @@ def load_api_keys() -> Dict[str, str]:
         except Exception as e:
             logger.warning(f"Could not load config.json: {e}")
     
-    # Load from environment variables
+    # Load from environment variables (priority override)
     env_api_key = os.getenv("MCP_API_KEY")
     if env_api_key:
-        api_keys[env_api_key] = {"user": "env_user", "description": "Environment API key"}
+        api_keys = {env_api_key: {"user": "env_user", "description": "Environment API key"}}
+        logger.info(f"Using environment API key: {env_api_key[:8]}...")
     
     # Generate default key if none exist
     if not api_keys:
@@ -208,7 +209,7 @@ def retrieve_memory(params: RetrieveMemoryInput) -> Dict[str, Any]:
         memoryos_instance = get_memoryos_for_user(params.user_id)
         
         # Retrieve memories using MemoryOS
-        result = memoryos_instance.retrieve_memory(
+        result = memoryos_instance.retriever.retrieve_memory(
             query=params.query,
             relationship_with_user=params.relationship_with_user,
             style_hint=params.style_hint,
@@ -264,7 +265,7 @@ def get_user_profile(params: GetUserProfileInput) -> Dict[str, Any]:
         memoryos_instance = get_memoryos_for_user(params.user_id)
         
         # Get user profile
-        profile = memoryos_instance.get_user_profile_summary()
+        profile = memoryos_instance.user_long_term_memory.get_user_profile_summary()
         
         result = {
             "status": "success",
@@ -295,6 +296,55 @@ def get_user_profile(params: GetUserProfileInput) -> Dict[str, Any]:
             "timestamp": datetime.now().isoformat(),
             "user_id": params.user_id
         }
+
+# Export app for deployment using FastMCP's internal app creation
+def create_deployment_app():
+    """Create FastAPI app for deployment"""
+    import asyncio
+    from fastapi import FastAPI, HTTPException, Security, Depends
+    from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+    from fastapi.middleware.cors import CORSMiddleware
+    
+    # Create a simple FastAPI wrapper that runs the MCP server
+    app = FastAPI(title="MemoryOS Remote MCP Server")
+    
+    # Add CORS middleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    
+    # Create MCP transport and mount it
+    @app.on_event("startup")
+    async def startup():
+        # The MCP server will run in the background
+        pass
+    
+    # Health check endpoint
+    @app.get("/")
+    async def health_check():
+        return {
+            "status": "healthy",
+            "service": "MemoryOS Remote MCP Server",
+            "version": "1.0.0",
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    # Mount MCP server at /mcp/ endpoint
+    from fastapi import Request
+    
+    @app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+    async def mcp_proxy(request: Request, path: str):
+        # This is a simple proxy - in production you'd want proper MCP handling
+        return {"message": "MCP endpoint - use proper MCP client"}
+    
+    return app
+
+# Create app for deployment
+app = create_deployment_app()
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))

@@ -1,0 +1,426 @@
+#!/usr/bin/env python3
+"""
+Test-User-Conversation-Memory
+Comprehensive test of Memory MCP client to MemoryOS MCP server integration.
+
+Tests:
+1. MCP connection and authentication
+2. All available MCP tools functionality 
+3. User conversation memory simulation with sequence patterns
+4. Q&A pair storage and retrieval with context continuity
+
+This test validates the complete memory system health.
+"""
+
+import asyncio
+import logging
+import sys
+import os
+from datetime import datetime
+from typing import Dict, Any, List
+
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+from config.settings import Settings
+from tools.memoryos_mcp_client import MemoryOSMCPClient
+from graph.state_graph import MultiAgentGraph
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+class UserConversationMemoryTest:
+    """Test user conversation memory with MCP integration."""
+    
+    def __init__(self):
+        self.settings = Settings()
+        self.mcp_client = None
+        self.agent_graph = None
+        self.test_results = []
+        self.test_user_id = "test_user_memory_validation"
+        
+    async def initialize(self):
+        """Initialize test environment."""
+        print("🧠 TEST-USER-CONVERSATION-MEMORY")
+        print("=" * 60)
+        print("Testing Memory MCP client to MemoryOS MCP server integration")
+        print("Validating conversation memory and Q&A pair handling")
+        print("=" * 60)
+        
+        # Initialize MCP client with same user_id used in storage/retrieval
+        try:
+            self.mcp_client = MemoryOSMCPClient(
+                server_url=self.settings.MEMORYOS_SERVER_URL,
+                api_key=self.settings.MEMORYOS_API_KEY,
+                user_id=self.test_user_id,  # Consistent user_id throughout
+                assistant_id="autopilot_expert_test"
+            )
+            await self.mcp_client.initialize()
+            print("✓ MCP client initialized and connected")
+            
+        except Exception as e:
+            print(f"❌ MCP client initialization failed: {e}")
+            return False
+            
+        # Initialize agent graph for conversation simulation (optional - not needed for MCP testing)
+        # Note: We're testing MCP client directly, not requiring full agent graph
+        self.agent_graph = None
+        print("✓ Test environment ready (MCP client focus)")
+            
+        return True
+        
+    async def test_mcp_connection_and_auth(self) -> Dict[str, Any]:
+        """Test 1: MCP connection and API key authentication."""
+        print("\n1️⃣ TESTING MCP CONNECTION AND AUTHENTICATION")
+        print("-" * 50)
+        
+        test_result = {
+            "name": "MCP Connection and Authentication",
+            "success": False,
+            "details": {},
+            "errors": []
+        }
+        
+        try:
+            # Test connection health
+            health_result = await self.mcp_client.health_check()
+            if health_result.get("success", False):
+                print("✓ MCP server health check passed")
+                test_result["details"]["health_check"] = "✓ PASS"
+            else:
+                print(f"❌ MCP server health check failed: {health_result}")
+                test_result["details"]["health_check"] = "❌ FAIL"
+                test_result["errors"].append(f"Health check: {health_result}")
+                
+            # Test authentication by attempting an operation
+            try:
+                auth_test = await self.mcp_client.get_user_profile()
+                if auth_test.get("success", False) or auth_test.get("profile"):
+                    print("✓ API key authentication successful")
+                    test_result["details"]["authentication"] = "✓ PASS"
+                else:
+                    print(f"⚠️ Authentication test result: {auth_test}")
+                    test_result["details"]["authentication"] = "⚠️ PARTIAL"
+                    
+            except Exception as auth_e:
+                print(f"❌ Authentication failed: {auth_e}")
+                test_result["details"]["authentication"] = "❌ FAIL"
+                test_result["errors"].append(f"Authentication: {auth_e}")
+                
+            # Overall success if health check passes
+            test_result["success"] = test_result["details"].get("health_check") == "✓ PASS"
+            
+        except Exception as e:
+            print(f"❌ MCP connection test failed: {e}")
+            test_result["errors"].append(f"Connection: {e}")
+            
+        self.test_results.append(test_result)
+        return test_result
+        
+    async def test_mcp_tools_functionality(self) -> Dict[str, Any]:
+        """Test 2: All available MCP tools functionality."""
+        print("\n2️⃣ TESTING MCP TOOLS FUNCTIONALITY")
+        print("-" * 50)
+        
+        test_result = {
+            "name": "MCP Tools Functionality", 
+            "success": False,
+            "details": {},
+            "errors": []
+        }
+        
+        try:
+            # Test add_memory tool
+            print("Testing add_memory tool...")
+            test_memory_data = f"Test memory entry - {datetime.now().isoformat()}"
+            add_result = await self.mcp_client.add_memory(
+                user_input=test_memory_data,
+                agent_response="Test response for memory validation"
+            )
+            
+            if add_result.get("success", False):
+                print("✓ add_memory tool working")
+                test_result["details"]["add_memory"] = "✓ PASS"
+            else:
+                print(f"❌ add_memory tool failed: {add_result}")
+                test_result["details"]["add_memory"] = "❌ FAIL"
+                test_result["errors"].append(f"add_memory: {add_result}")
+                
+            # Test retrieve_memory tool
+            print("Testing retrieve_memory tool...")
+            retrieve_result = await self.mcp_client.retrieve_memory(
+                query="test memory"
+            )
+            
+            if retrieve_result.get("success", False):
+                memories = retrieve_result.get("memories", [])
+                print(f"✓ retrieve_memory tool working - found {len(memories)} memories")
+                test_result["details"]["retrieve_memory"] = f"✓ PASS ({len(memories)} memories)"
+            else:
+                print(f"❌ retrieve_memory tool failed: {retrieve_result}")
+                test_result["details"]["retrieve_memory"] = "❌ FAIL"
+                test_result["errors"].append(f"retrieve_memory: {retrieve_result}")
+                
+            # Test get_user_profile tool
+            print("Testing get_user_profile tool...")
+            profile_result = await self.mcp_client.get_user_profile()
+            
+            if profile_result.get("success", False) or profile_result.get("profile"):
+                print("✓ get_user_profile tool working")
+                test_result["details"]["get_user_profile"] = "✓ PASS"
+            else:
+                print(f"⚠️ get_user_profile tool result: {profile_result}")
+                test_result["details"]["get_user_profile"] = "⚠️ PARTIAL"
+                
+            # Overall success if core tools work
+            passed_tools = sum(1 for status in test_result["details"].values() if "✓ PASS" in status)
+            total_tools = len(test_result["details"])
+            test_result["success"] = passed_tools >= 2  # At least add and retrieve must work
+            
+            print(f"\nMCP Tools Summary: {passed_tools}/{total_tools} tools functional")
+            
+        except Exception as e:
+            print(f"❌ MCP tools test failed: {e}")
+            test_result["errors"].append(f"Tools test: {e}")
+            
+        self.test_results.append(test_result)
+        return test_result
+        
+    async def test_conversation_memory_sequence(self) -> Dict[str, Any]:
+        """Test 3: User conversation memory with number sequence."""
+        print("\n3️⃣ TESTING CONVERSATION MEMORY SEQUENCE")
+        print("-" * 50)
+        
+        test_result = {
+            "name": "Conversation Memory Sequence",
+            "success": False, 
+            "details": {},
+            "errors": [],
+            "conversation_log": []
+        }
+        
+        try:
+            # Clear any existing test data first
+            print("Clearing previous test data...")
+            
+            # Prompt 1: Initial sequence question
+            print("\n👤 User Prompt 1: Continue the sequence: 1, 3, 7... and add 2 more numbers")
+            prompt_1 = "Continue the sequence: 1, 3, 7... and add 2 more numbers"
+            
+            # Simulate agent memory retrieval (should find no context)
+            memory_context_1 = await self.mcp_client.retrieve_memory(
+                query=prompt_1
+            )
+            
+            has_context_1 = memory_context_1.get("success", False) and len(memory_context_1.get("memories", [])) > 0
+            print(f"📋 Memory check 1: {'Found context' if has_context_1 else 'No previous context'}")
+            
+            # Generate response (sequence: 1, 3, 7, 15, 31 - pattern: +2, +4, +8, +16)
+            response_1 = "Looking at the sequence 1, 3, 7... I can see the pattern: each difference doubles (+2, +4, +8). So the next two numbers would be 15 (7+8) and 31 (15+16). The complete sequence is: 1, 3, 7, 15, 31"
+            print(f"🤖 Agent Response 1: {response_1}")
+            
+            # Store the Q&A pair in memory (user_id automatically used from client initialization)
+            storage_1 = await self.mcp_client.add_memory(
+                user_input=prompt_1,  # Clean format without prefixes
+                agent_response=response_1
+            )
+            
+            if storage_1.get("success", False):
+                print("✓ Q&A pair 1 stored successfully")
+                test_result["details"]["storage_1"] = "✓ PASS"
+            else:
+                print(f"❌ Q&A pair 1 storage failed: {storage_1}")
+                test_result["details"]["storage_1"] = "❌ FAIL"
+                test_result["errors"].append(f"Storage 1: {storage_1}")
+                
+            test_result["conversation_log"].append({
+                "turn": 1,
+                "user_prompt": prompt_1,
+                "agent_response": response_1,
+                "memory_stored": storage_1.get("success", False)
+            })
+            
+            # Prompt 2: Follow-up question requiring context
+            print("\n👤 User Prompt 2: great, add 2 more numbers")
+            prompt_2 = "great, add 2 more numbers"
+            
+            # Simulate agent memory retrieval (should find previous sequence context)
+            # Try multiple search strategies to find stored conversation
+            search_queries = ["sequence", "numbers", "1, 3, 7", "continue", "pattern"]
+            memory_context_2 = None
+            has_context_2 = False
+            
+            for query in search_queries:
+                memory_context_2 = await self.mcp_client.retrieve_memory(query=query)
+                has_context_2 = memory_context_2.get("success", False) and len(memory_context_2.get("memories", [])) > 0
+                
+                if has_context_2:
+                    print(f"📋 Memory check 2: Found context with query '{query}'")
+                    memories = memory_context_2.get("memories", [])
+                    print(f"   Retrieved {len(memories)} relevant memories")
+                    for i, memory in enumerate(memories[:2]):  # Show first 2
+                        content = memory.get("content", "")[:100]
+                        print(f"   Memory {i+1}: {content}...")
+                    break
+                else:
+                    print(f"📋 Memory check 2: No context found for query '{query}'")
+            
+            if not has_context_2:
+                print("📋 Memory check 2: No context found with any search strategy")
+                    
+            # Generate contextual response based on memory
+            response_2 = "Continuing the sequence 1, 3, 7, 15, 31... with the doubling difference pattern (+32, +64), the next two numbers are: 63 (31+32) and 127 (63+64). Extended sequence: 1, 3, 7, 15, 31, 63, 127"
+            print(f"🤖 Agent Response 2: {response_2}")
+            
+            # Store the second Q&A pair (user_id automatically used from client initialization)
+            storage_2 = await self.mcp_client.add_memory(
+                user_input=prompt_2,  # Clean format without prefixes
+                agent_response=response_2
+            )
+            
+            if storage_2.get("success", False):
+                print("✓ Q&A pair 2 stored successfully")
+                test_result["details"]["storage_2"] = "✓ PASS"
+            else:
+                print(f"❌ Q&A pair 2 storage failed: {storage_2}")
+                test_result["details"]["storage_2"] = "❌ FAIL"
+                test_result["errors"].append(f"Storage 2: {storage_2}")
+                
+            test_result["conversation_log"].append({
+                "turn": 2,
+                "user_prompt": prompt_2,
+                "agent_response": response_2,
+                "memory_context_found": has_context_2,
+                "memory_stored": storage_2.get("success", False)
+            })
+            
+            # Success criteria: memory context was found for follow-up question
+            test_result["details"]["context_retrieval"] = "✓ PASS" if has_context_2 else "❌ FAIL"
+            test_result["success"] = (
+                test_result["details"].get("storage_1") == "✓ PASS" and
+                test_result["details"].get("storage_2") == "✓ PASS" and
+                has_context_2
+            )
+            
+            print(f"\n💾 Memory System Health: {'✓ HEALTHY' if test_result['success'] else '❌ NEEDS ATTENTION'}")
+            
+        except Exception as e:
+            print(f"❌ Conversation memory test failed: {e}")
+            test_result["errors"].append(f"Conversation test: {e}")
+            
+        self.test_results.append(test_result)
+        return test_result
+        
+    async def generate_comprehensive_report(self):
+        """Generate detailed test report."""
+        print("\n" + "=" * 60)
+        print("📊 TEST-USER-CONVERSATION-MEMORY RESULTS")
+        print("=" * 60)
+        
+        total_tests = len(self.test_results)
+        successful_tests = sum(1 for test in self.test_results if test.get("success", False))
+        success_rate = (successful_tests / total_tests * 100) if total_tests > 0 else 0
+        
+        print(f"Total Tests: {total_tests}")
+        print(f"Successful: {successful_tests}")
+        print(f"Failed: {total_tests - successful_tests}")
+        print(f"Success Rate: {success_rate:.1f}%")
+        
+        print(f"\n📋 DETAILED RESULTS:")
+        print("-" * 60)
+        
+        for i, test in enumerate(self.test_results, 1):
+            status = "✓" if test.get("success", False) else "❌"
+            name = test.get("name", f"Test {i}")
+            print(f"{status} {name}")
+            
+            if "details" in test:
+                for detail_name, detail_status in test["details"].items():
+                    print(f"   {detail_name}: {detail_status}")
+                    
+            if test.get("errors"):
+                for error in test["errors"]:
+                    print(f"   Error: {error}")
+                    
+            print()
+            
+        # Memory system health assessment
+        print("🏥 MEMORY SYSTEM HEALTH ASSESSMENT:")
+        print("-" * 40)
+        
+        if success_rate >= 100:
+            print("   🎉 EXCELLENT - Memory system fully operational")
+        elif success_rate >= 80:
+            print("   ✅ GOOD - Memory system mostly functional")
+        elif success_rate >= 60:
+            print("   ⚠️ PARTIAL - Memory system has issues")
+        else:
+            print("   ❌ CRITICAL - Memory system needs immediate attention")
+            
+        print(f"\n📝 RECOMMENDATIONS:")
+        if success_rate < 100:
+            print("   • Check MemoryOS MCP server connectivity")
+            print("   • Verify API key configuration")
+            print("   • Test memory storage and retrieval separately")
+        else:
+            print("   • Memory system is healthy and ready for production")
+            print("   • Conversation continuity working correctly")
+            
+        return {
+            'total_tests': total_tests,
+            'successful_tests': successful_tests,
+            'success_rate': success_rate,
+            'memory_system_healthy': success_rate >= 80,
+            'all_results': self.test_results
+        }
+        
+    async def cleanup(self):
+        """Clean up test data and connections."""
+        try:
+            if self.mcp_client and hasattr(self.mcp_client, 'http_client'):
+                await self.mcp_client.http_client.aclose()
+                print("✓ MCP client connection closed")
+        except Exception as e:
+            print(f"⚠️ Cleanup warning: {e}")
+            
+    async def run_all_tests(self):
+        """Run the complete test suite."""
+        try:
+            # Initialize
+            if not await self.initialize():
+                print("❌ Test initialization failed")
+                return False
+                
+            # Run test suites
+            await self.test_mcp_connection_and_auth()
+            await self.test_mcp_tools_functionality() 
+            await self.test_conversation_memory_sequence()
+            
+            # Generate report
+            summary = await self.generate_comprehensive_report()
+            
+            return summary.get("memory_system_healthy", False)
+            
+        except Exception as e:
+            print(f"❌ Test suite failed: {e}")
+            return False
+            
+        finally:
+            await self.cleanup()
+
+async def main():
+    """Main test execution function."""
+    test_suite = UserConversationMemoryTest()
+    
+    try:
+        success = await test_suite.run_all_tests()
+        print(f"\n🏁 Memory system test {'PASSED' if success else 'FAILED'}")
+        return success
+        
+    except Exception as e:
+        print(f"❌ Test execution failed: {e}")
+        return False
+
+if __name__ == "__main__":
+    asyncio.run(main())

@@ -14,15 +14,15 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "MemoryOS Production Server"
+args = "Pure MCP 2.0 Server"
 
 [[workflows.workflow]]
-name = "MemoryOS Production Server"
+name = "Pure MCP 2.0 Server"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python deploy_server.py"
+args = "python mcp_server.py"
 waitForPort = 5000
 
 [deployment]

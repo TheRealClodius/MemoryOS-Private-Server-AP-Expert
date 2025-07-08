@@ -14,57 +14,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Install Dependencies"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "install_and_test"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Remote MCP Server"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "MCP 2.0 Remote Server"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
 args = "MemoryOS Production Server"
-
-[[workflows.workflow]]
-name = "Install Dependencies"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pip install mcp openai numpy faiss-cpu pydantic"
-
-[[workflows.workflow]]
-name = "install_and_test"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pip install mcp openai numpy faiss-cpu pydantic"
-
-[[workflows.workflow]]
-name = "Remote MCP Server"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python mcp_remote_server.py"
-waitForPort = 5000
-
-[[workflows.workflow]]
-name = "MCP 2.0 Remote Server"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "PORT=5001 python mcp_remote_server.py"
-waitForPort = 5001
 
 [[workflows.workflow]]
 name = "MemoryOS Production Server"

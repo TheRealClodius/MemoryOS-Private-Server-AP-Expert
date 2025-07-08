@@ -545,35 +545,149 @@ async def handle_mcp_request(
         
         json_request = json.loads(body.decode())
         
-        # Create or get session with API key context
-        session_id = request.headers.get("X-Session-ID", f"{api_key[:8]}-{secrets.token_hex(4)}")
-        
         # Map API key to user ID for isolation
         user_id = request.headers.get("X-User-ID")
         if not user_id:
             # Use API key name as default user ID for isolation
             user_id = key_info.get("name", f"user_{api_key[:8]}") if key_info else f"user_{api_key[:8]}"
         
-        # Set user for this session
-        set_user_for_session(session_id, user_id)
+        print(f"🔐 Mapped session {api_key[:8]}... to user {user_id}", file=sys.stderr)
         
-        if session_id not in streamable_server.sessions:
-            streamable_server.sessions[session_id] = ServerSession(
-                streamable_server.server,
-                InitializationOptions(
-                    server_name="MemoryOS",
-                    server_version="1.0.0",
-                    capabilities=streamable_server.server.get_capabilities()
+        # Handle MCP request directly
+        method = json_request.get("method")
+        params = json_request.get("params", {})
+        request_id = json_request.get("id")
+        
+        if method == "initialize":
+            # Return initialization response
+            response = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {
+                        "logging": {},
+                        "tools": {}
+                    },
+                    "serverInfo": {
+                        "name": "MemoryOS",
+                        "version": "1.0.0"
+                    }
+                }
+            }
+        elif method == "tools/list":
+            # Return available tools
+            tools = [
+                {
+                    "name": "add_memory",
+                    "description": "Add a new memory to the MemoryOS system",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "user_input": {"type": "string", "description": "The user's input or question"},
+                            "agent_response": {"type": "string", "description": "The agent's response"},
+                            "user_id": {"type": "string", "description": "The user identifier for memory isolation (required)"},
+                            "timestamp": {"type": "string", "description": "Optional timestamp in ISO format"},
+                            "meta_data": {"type": "object", "description": "Optional metadata dictionary"}
+                        },
+                        "required": ["user_input", "agent_response", "user_id"]
+                    }
+                },
+                {
+                    "name": "retrieve_memory",
+                    "description": "Retrieve relevant memories from MemoryOS",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string", "description": "Search query"},
+                            "user_id": {"type": "string", "description": "The user identifier for memory isolation (required)"},
+                            "relationship_with_user": {"type": "string", "description": "Relationship context", "default": "assistant"},
+                            "style_hint": {"type": "string", "description": "Style preference", "default": ""},
+                            "max_results": {"type": "integer", "default": 10, "description": "Maximum number of results"}
+                        },
+                        "required": ["query", "user_id"]
+                    }
+                },
+                {
+                    "name": "get_user_profile",
+                    "description": "Get comprehensive user profile information",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "user_id": {"type": "string", "description": "The user identifier for profile retrieval (required)"},
+                            "include_knowledge": {"type": "boolean", "description": "Whether to include user knowledge entries", "default": True},
+                            "include_assistant_knowledge": {"type": "boolean", "description": "Whether to include assistant knowledge entries", "default": False}
+                        },
+                        "required": ["user_id"]
+                    }
+                }
+            ]
+            response = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {
+                    "tools": tools
+                }
+            }
+        elif method == "tools/call":
+            # Handle tool calls
+            tool_name = params.get("name")
+            arguments = params.get("arguments", {})
+            
+            if tool_name == "add_memory":
+                result = await add_memory(
+                    user_input=arguments.get("user_input", ""),
+                    agent_response=arguments.get("agent_response", ""),
+                    user_id=arguments.get("user_id", user_id),
+                    timestamp=arguments.get("timestamp"),
+                    meta_data=arguments.get("meta_data")
                 )
-            )
-        
-        session = streamable_server.sessions[session_id]
-        
-        # Store session context for tools
-        streamable_server.current_session_id = session_id
-        
-        # Process request through MCP session
-        response = await session.handle_request(json_request)
+            elif tool_name == "retrieve_memory":
+                result = await retrieve_memory(
+                    query=arguments.get("query", ""),
+                    user_id=arguments.get("user_id", user_id),
+                    relationship_with_user=arguments.get("relationship_with_user", "assistant"),
+                    style_hint=arguments.get("style_hint", ""),
+                    max_results=arguments.get("max_results", 10)
+                )
+            elif tool_name == "get_user_profile":
+                result = await get_user_profile(
+                    user_id=arguments.get("user_id", user_id),
+                    include_knowledge=arguments.get("include_knowledge", True),
+                    include_assistant_knowledge=arguments.get("include_assistant_knowledge", False)
+                )
+            else:
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {
+                        "code": -32601,
+                        "message": f"Unknown tool: {tool_name}"
+                    }
+                }
+                return JSONResponse(content=response, status_code=400)
+            
+            response = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps(result.dict(), indent=2)
+                        }
+                    ]
+                }
+            }
+        else:
+            response = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "error": {
+                    "code": -32601,
+                    "message": f"Unknown method: {method}"
+                }
+            }
         
         return JSONResponse(content=response)
         

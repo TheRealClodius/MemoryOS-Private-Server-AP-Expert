@@ -102,8 +102,16 @@ def get_memoryos_for_user(user_id: str) -> Memoryos:
         user_config = config.copy()
         user_config["data_storage_path"] = str(user_data_path)
         
-        # Initialize MemoryOS instance
-        user_memory_instances[user_id] = Memoryos(config_dict=user_config)
+        # Initialize MemoryOS instance with correct constructor parameters
+        user_memory_instances[user_id] = Memoryos(
+            user_id=user_id,
+            openai_api_key=user_config["openai_api_key"],
+            data_storage_path=user_config["data_storage_path"],
+            llm_model=user_config["llm_model"],
+            embedding_model=user_config["embedding_model"],
+            short_term_capacity=user_config["max_short_term_memory"],
+            mid_term_capacity=user_config["max_mid_term_memory"]
+        )
         
     return user_memory_instances[user_id]
 

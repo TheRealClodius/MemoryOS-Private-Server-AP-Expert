@@ -421,22 +421,25 @@ async def deploy_streamable_http():
         if not os.getenv("MCP_API_KEY"):
             os.environ["MCP_API_KEY"] = "77gOCTIGuZLslr-vIk8uTsWF0PZmMgyU8RxMKn_VZd4"
         
-        # Import the remote MCP server
-        import mcp_remote_server
+        # Import the correct MCP server
+        from mcp_server import app
         
-        logger.info("Starting MemoryOS Remote MCP Server (StreamableHTTP)")
+        logger.info("Starting MemoryOS Pure MCP 2.0 Server")
         logger.info(f"Server URL: http://0.0.0.0:{os.getenv('PORT', '5000')}")
         logger.info(f"API Key: {os.getenv('MCP_API_KEY')[:8]}...")
-        logger.info("Transport: StreamableHTTP")
+        logger.info("Transport: HTTP with JSON-RPC 2.0")
         logger.info("Ready for remote MCP clients with authentication")
         
-        # Run the MCP server directly using its main function
+        # Run the MCP server directly
         port = int(os.getenv("PORT", "5000"))
-        await mcp_remote_server.mcp.run_async(
-            transport="streamable-http",
-            host="0.0.0.0", 
+        config = uvicorn.Config(
+            app,
+            host="0.0.0.0",
             port=port,
+            log_level="info"
         )
+        server = uvicorn.Server(config)
+        await server.serve()
         
     except KeyboardInterrupt:
         logger.info("Shutting down server...")
@@ -447,15 +450,13 @@ async def deploy_streamable_http():
 async def deploy_stdio():
     """Deploy MemoryOS as a stdio MCP server (legacy mode)"""
     try:
-        # Import after path setup
-        from mcp_server import mcp
-        
         logger.info("Starting MemoryOS MCP Server (stdio - legacy mode)")
         logger.info("Transport: stdio")
-        logger.info("Ready for local MCP clients")
+        logger.info("Note: stdio mode not supported in this version")
+        logger.info("Redirecting to HTTP mode for deployment compatibility")
         
-        # Run the server
-        await mcp.run(transport="stdio")
+        # Redirect to HTTP mode since stdio is not supported
+        await deploy_streamable_http()
         
     except KeyboardInterrupt:
         logger.info("Shutting down server...")
@@ -467,7 +468,7 @@ async def main():
     """Main deployment entry point"""
     # Check deployment mode
     mode = os.getenv("SERVER_MODE", "streamable-http").lower()
-    port = os.getenv("PORT", "3000")
+    port = os.getenv("PORT", "5000")
     
     logger.info(f"MemoryOS MCP Server Deployment")
     logger.info(f"Mode: {mode}")

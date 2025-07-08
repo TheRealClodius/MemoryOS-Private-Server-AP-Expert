@@ -233,8 +233,8 @@ class SecurityConfig:
         """Validate API key and return key info"""
         return self.api_keys.get(api_key)
 
-# Initialize security configuration
-security_config = SecurityConfig()
+# Security configuration will be initialized in init_server()
+security_config = None
 
 # Rate limiting storage
 rate_limit_storage = defaultdict(list)
@@ -304,6 +304,11 @@ async def get_api_key(
     bearer_token: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme)
 ) -> str:
     """Extract API key from header or bearer token"""
+    global security_config
+    
+    # Ensure security config is initialized
+    if security_config is None:
+        security_config = SecurityConfig()
     
     # Try header first
     if api_key_header:
@@ -321,6 +326,10 @@ async def get_api_key(
     if os.getenv("DISABLE_AUTH", "false").lower() == "true":
         print("⚠️  Authentication disabled - development mode only!", file=sys.stderr)
         return "dev-mode"
+    
+    # Debug logging for failed authentication
+    print(f"❌ API key validation failed. Received header: {api_key_header[:8] if api_key_header else 'None'}...", file=sys.stderr)
+    print(f"❌ Available keys: {[key[:8] + '...' for key in security_config.api_keys.keys()]}", file=sys.stderr)
     
     raise HTTPException(
         status_code=401,
@@ -406,22 +415,9 @@ app = FastAPI(
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimitMiddleware)
 
-# Add CORS middleware if enabled
-if security_config.enable_cors:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=security_config.allowed_origins,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "DELETE"],
-        allow_headers=["*"],
-    )
+# CORS middleware will be added after security config is initialized in init_server()
 
-# Add trusted host middleware
-if security_config.trusted_hosts != ["*"]:
-    app.add_middleware(
-        TrustedHostMiddleware,
-        allowed_hosts=security_config.trusted_hosts
-    )
+# Trusted host middleware will be added after security config is initialized in init_server()
 
 # StreamableHTTP MCP Server Implementation
 class StreamableHTTPMCPServer:
@@ -804,6 +800,36 @@ async def get_stats(api_key: str = Depends(get_api_key)):
 
 async def init_server():
     """Initialize the MemoryOS server (no global instance needed)"""
+    global security_config
+    
+    # Initialize security configuration after environment variables are set
+    if security_config is None:
+        security_config = SecurityConfig()
+        print(f"🔑 Security initialized with {len(security_config.api_keys)} API key(s)", file=sys.stderr)
+        for key, info in security_config.api_keys.items():
+            print(f"🔑 Loaded API key: {key[:8]}... (name: {info['name']})", file=sys.stderr)
+        
+        # Add CORS middleware now that security config is initialized
+        if security_config.enable_cors:
+            from fastapi.middleware.cors import CORSMiddleware
+            app.add_middleware(
+                CORSMiddleware,
+                allow_origins=security_config.allowed_origins,
+                allow_credentials=True,
+                allow_methods=["GET", "POST", "DELETE"],
+                allow_headers=["*"],
+            )
+            print("🌐 CORS middleware enabled", file=sys.stderr)
+        
+        # Add trusted host middleware now that security config is initialized
+        if security_config.trusted_hosts != ["*"]:
+            from fastapi.middleware.trustedhost import TrustedHostMiddleware
+            app.add_middleware(
+                TrustedHostMiddleware,
+                allowed_hosts=security_config.trusted_hosts
+            )
+            print("🔒 Trusted host middleware enabled", file=sys.stderr)
+    
     # Load configuration to verify setup
     print("Loading MemoryOS configuration...", file=sys.stderr)
     config = load_config()

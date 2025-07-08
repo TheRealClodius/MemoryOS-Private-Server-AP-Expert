@@ -96,9 +96,9 @@ The system follows a modular, layered architecture with clear separation of conc
   - `test_local_deployment.py`, `test_remote_mcp.py`, `test_production_server.py` - old methods
   - `test_mcp_2_0_*.py`, `test_final_mcp_2_0.py`, `test_working_mcp_2_0.py` - development tests
   - `test_api_key.py`, `test_simple_auth.py`, `test_security.py` - redundant/outdated
-- **Essential Tests Retained**:
+- **Essential Tests Retained** (3 files only):
   - `test_full_functionality.py` - Core MemoryOS functionality with real API
-  - `test_user_isolation.py` - Critical security feature testing
+  - `test_user_isolation.py` - Critical security feature testing  
   - `test_server.py` - Basic MCP server functionality
 - **Current Entry Points**: 
   - `mcp_server.py` - Direct pure MCP 2.0 server (recommended)
@@ -106,9 +106,12 @@ The system follows a modular, layered architecture with clear separation of conc
 - **Current Documentation**: 
   - `README.md` - Complete user guide with MCP 2.0 examples
   - `REMOTE_MCP_DEPLOYMENT.md` - Comprehensive deployment guide with security
-- **Test Data Cleanup**: Removed memoryos_data/ folder (52KB, 25 test user directories)
+- **Development Artifacts Cleanup**: Removed all test/demo/debug files and directories:
+  - Test data: memoryos_data/, test_memoryos_data/, test_tier_data/, demo_memoryos_data/
+  - Debug files: debug_test_data/, debug_memoryos_init.py  
+  - Simple test scripts: simple_test_server.py, simple_working_test.py
 - **Auto-Creation Verified**: Data directories recreate automatically when users first interact
-- **Total Cleanup**: 19 files + test data removed, project streamlined to essential components only
+- **Total Cleanup**: 26 files + all test data removed, project streamlined to essential components only
 - **Benefits**: Single source of truth, no conflicting instructions, clean project structure
 - **VERIFIED**: Only current, accurate files remain - production ready
 

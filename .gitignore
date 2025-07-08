@@ -1,5 +1,7 @@
 # Security - Never commit API keys or secrets
 config.json
+.env
+*.env
 
 # MemoryOS data directories
 memoryos_data/

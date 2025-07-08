@@ -29,7 +29,7 @@ MemoryOS is a sophisticated memory management system for AI agents that mimics h
 - **🔍 Semantic Memory Retrieval**: Vector similarity search using OpenAI embeddings and FAISS
 - **👤 Automatic User Profiling**: Builds comprehensive personality profiles from conversation history
 - **📚 Knowledge Extraction**: Identifies and stores important facts about users and topics
-- **🎯 Relevance Filtering**: Smart threshold-based filtering to return only highly relevant memories
+- **🎯 Redis-Style Short-Term Access**: Fast FIFO retrieval without filtering for immediate conversation context
 - **⚡ Heat-based Optimization**: Frequently accessed information promotes to faster storage tiers
 
 ### Production Features
@@ -52,7 +52,7 @@ MemoryOS implements a sophisticated three-tier memory hierarchy inspired by oper
 │  🚀 SHORT-TERM MEMORY (Redis-style)                       │
 │  ├─ Python deque with maxlen (FIFO)                       │
 │  ├─ Sub-millisecond access time                           │
-│  ├─ Recent conversations (default: 10 entries)            │
+│  ├─ Recent conversations (default: 7 entries)             │
 │  └─ Automatic overflow to mid-term                        │
 ├─────────────────────────────────────────────────────────────┤
 │  📊 MID-TERM MEMORY (Heat-based)                          │
@@ -82,7 +82,7 @@ MemoryOS implements a sophisticated three-tier memory hierarchy inspired by oper
 
 | Memory Tier | Access Time | Storage Type | Capacity | Search Method |
 |-------------|-------------|--------------|----------|---------------|
-| Short-term  | < 1ms       | In-memory deque | 10 entries | Linear scan |
+| Short-term  | < 1ms       | In-memory deque | 7 entries | Recent FIFO access |
 | Mid-term    | < 50ms      | JSON + embeddings | 2000 segments | Embedding similarity |
 | Long-term   | < 100ms     | JSON + FAISS | 100 knowledge items | Vector search |
 
@@ -453,7 +453,7 @@ export MEMORYOS_LOG_LEVEL="INFO"                    # Logging level
   "assistant_id": "mcp_assistant",
   "llm_model": "gpt-4o-mini",
   "embedding_model": "text-embedding-3-small",
-  "short_term_capacity": 10,
+  "short_term_capacity": 7,
   "mid_term_capacity": 2000,
   "long_term_knowledge_capacity": 100,
   "retrieval_queue_capacity": 7,
@@ -466,7 +466,7 @@ export MEMORYOS_LOG_LEVEL="INFO"                    # Logging level
 #### Memory Capacity Optimization
 ```json
 {
-  "short_term_capacity": 5,     // Faster, less context
+  "short_term_capacity": 5,     // Reduced for faster Redis-style access
   "mid_term_capacity": 1000,    // Reduce for faster search
   "long_term_knowledge_capacity": 50  // Smaller knowledge base
 }

@@ -233,20 +233,19 @@ The system follows a modular, layered architecture with clear separation of conc
 - **VERIFIED WORKING**: All FIFO operations, overflow handling, and persistence functional
 - **Performance**: Matches original MemoryOS behavior with Redis-like characteristics
 
-✅ **July 06, 2025 - SIMILARITY THRESHOLD FILTERING FIX**
-- **RELEVANCE ISSUE RESOLVED**: Fixed memory retrieval returning irrelevant results
-- **Problem**: System returned any matches regardless of relevance (threshold: 0.3)
-- **Solution**: Implemented proper similarity filtering with 0.7 threshold across all memory layers
-- **Filtering Improvements**:
-  - Short-term memory: Word overlap similarity with 0.7 threshold
-  - Mid-term memory: Embedding similarity threshold increased from 0.3 to 0.7
-  - Long-term knowledge: User/assistant knowledge threshold increased to 0.7
-  - Empty results returned when no matches meet relevance threshold
+✅ **July 06, 2025 - MEMORY ARCHITECTURE ALIGNMENT WITH ORIGINAL MEMORYOS**
+- **ARCHITECTURAL CORRECTION**: Aligned short-term memory with original BAI-LAB MemoryOS specification
+- **Problem**: Mixed Redis-style and vector search approaches in short-term memory
+- **Solution**: Separated concerns - Redis-style for short-term, vector search for mid/long-term
+- **Architecture Clarification**:
+  - Short-term memory: Redis-style FIFO access without similarity filtering
+  - Mid-term memory: Heat-based promotion with embedding similarity search  
+  - Long-term knowledge: Semantic search with vector embeddings and relevance thresholds
 - **VERIFIED WORKING**: 
-  - Relevant query "favorite color" returns matching memory (score: 1.5)
-  - Irrelevant query "weather today" returns empty results
-  - Partial match "blue sky" properly filtered out
-- **Behavior**: Only highly relevant memories returned, improving user experience
+  - Short-term: Fast FIFO retrieval provides recent conversation context
+  - Mid-term: Similarity search with proper thresholds for consolidated segments
+  - Long-term: Vector search with high relevance filtering for knowledge retrieval
+- **Behavior**: Each memory tier optimized for its specific purpose and access patterns
 
 ✅ **July 06, 2025 - CRITICAL SECURITY FIX: User Data Isolation Vulnerability**
 - **SECURITY VULNERABILITY RESOLVED**: Fixed major data leakage issue in API endpoints

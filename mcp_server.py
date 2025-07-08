@@ -674,7 +674,7 @@ async def handle_mcp_request(
                     "content": [
                         {
                             "type": "text",
-                            "text": json.dumps(result.dict(), indent=2)
+                            "text": json.dumps(result.model_dump(), indent=2)
                         }
                     ]
                 }

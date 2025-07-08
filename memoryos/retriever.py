@@ -65,39 +65,29 @@ class MemoryRetriever:
         return context
     
     def _get_short_term_context(self, user_query: str) -> List[Dict[str, Any]]:
-        """Get relevant context from short-term memory with similarity filtering"""
+        """Get recent context from short-term memory - Redis-style fast access without filtering"""
         try:
-            # Get relevant memory based on query
-            relevant_memory = self.short_term_memory.get_context_for_query(user_query, self.queue_capacity)
+            # Original MemoryOS: Simply return recent memory entries without similarity filtering
+            # Short-term memory is for immediate context, not semantic search
+            recent_memory = self.short_term_memory.get_recent(self.queue_capacity)
             
-            # Apply similarity threshold filtering
-            query_words = set(user_query.lower().split())
-            filtered_memory = []
-            
-            for entry in relevant_memory:
-                # Calculate similarity score
+            # Add basic relevance score for compatibility but don't filter
+            for entry in recent_memory:
+                # Simple keyword presence check for score (but don't filter out)
+                query_words = set(user_query.lower().split())
                 user_input_words = set(entry.get("user_input", "").lower().split())
                 agent_response_words = set(entry.get("agent_response", "").lower().split())
                 
-                # Calculate word overlap similarity
-                total_query_words = len(query_words)
-                if total_query_words == 0:
-                    continue
-                    
                 user_overlap = len(query_words.intersection(user_input_words))
                 agent_overlap = len(query_words.intersection(agent_response_words))
                 
-                # Calculate similarity score (0.0 to 1.0)
-                similarity_score = (user_overlap * 2 + agent_overlap) / (total_query_words * 2)
-                
-                # Apply threshold - only return if similarity is above 0.7
-                if similarity_score >= 0.7:
-                    entry["similarity_score"] = similarity_score
-                    filtered_memory.append(entry)
+                # Score for ordering but don't exclude any entries
+                score = user_overlap * 2 + agent_overlap
+                entry["similarity_score"] = score if score > 0 else 1.0  # Default score for recency
             
-            # Sort by similarity score and return top results
-            filtered_memory.sort(key=lambda x: x.get("similarity_score", 0), reverse=True)
-            return filtered_memory[:self.queue_capacity]
+            # Sort by score but include all recent entries
+            recent_memory.sort(key=lambda x: x.get("similarity_score", 1.0), reverse=True)
+            return recent_memory
         
         except Exception as e:
             print(f"Error retrieving short-term context: {e}")

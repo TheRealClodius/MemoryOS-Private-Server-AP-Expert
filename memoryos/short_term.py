@@ -311,41 +311,21 @@ class ShortTermMemory:
     
     def get_context_for_query(self, query: str, max_entries: int = 5) -> List[Dict[str, Any]]:
         """
-        Get relevant context from short-term memory for a query
+        Get context from short-term memory - Redis-style fast access
+        
+        Original MemoryOS: Short-term memory provides recent context without semantic filtering.
+        This is for immediate conversation flow, not deep semantic search.
         
         Args:
-            query: The user query
+            query: The user query (kept for compatibility but not used for filtering)
             max_entries: Maximum number of entries to return
             
         Returns:
-            List of relevant memory entries
+            List of recent memory entries (Redis-style FIFO access)
         """
-        # Simple relevance scoring based on keyword matching
-        query_words = set(query.lower().split())
-        scored_entries = []
-        
-        # Convert deque to list for processing
-        memory_list = list(self.memory)
-        
-        for entry in memory_list:
-            score = 0
-            
-            # Score based on keyword matches
-            user_input_words = set(entry.get("user_input", "").lower().split())
-            agent_response_words = set(entry.get("agent_response", "").lower().split())
-            
-            # Calculate overlap
-            user_overlap = len(query_words.intersection(user_input_words))
-            agent_overlap = len(query_words.intersection(agent_response_words))
-            
-            score = user_overlap * 2 + agent_overlap  # Weight user input higher
-            
-            if score > 0:
-                scored_entries.append((score, entry))
-        
-        # Sort by score and return top entries
-        scored_entries.sort(key=lambda x: x[0], reverse=True)
-        return [entry for _, entry in scored_entries[:max_entries]]
+        # Original MemoryOS approach: Return recent entries without complex filtering
+        # Short-term memory is about recency, not semantic relevance
+        return self.get_recent(max_entries)
     
     def export_for_consolidation(self) -> Dict[str, Any]:
         """Export data for mid-term memory consolidation"""

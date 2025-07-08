@@ -80,6 +80,36 @@ The system follows a modular, layered architecture with clear separation of conc
 
 ## Recent Changes
 
+✅ **July 08, 2025 - Complete Legacy Cleanup & Test Suite Streamlined**
+- **COMPREHENSIVE CLEANUP COMPLETED**: Removed all redundant files and outdated test suite
+- **Problem**: Multiple files contained contradictory information with wrong server references
+- **Solution**: Streamlined to single, correct entry points and essential tests aligned with pure MCP 2.0
+- **Documentation Files Removed**:
+  - `DEPLOYMENT.md` (150 lines) - referenced deprecated FastMCP stdio transport
+  - `DEPLOYMENT_SETUP.md` (112 lines) - mixed outdated client-specific information  
+  - `SECURITY.md` (338 lines) - wrong authentication (X-API-Key), wrong ports (3000), REST API endpoints
+  - `USER_MANAGEMENT.md` (251 lines) - wrong REST API endpoints (/api/user_info), contradicted MCP 2.0
+- **Legacy Entry Points Removed**:
+  - `run.py` (36 lines) - imported wrong `deploy_server.py`, created deployment confusion
+- **Redundant Test Files Removed (13 files)**:
+  - `test_fastmcp_client.py`, `test_client_auth_fix.py`, `test_deployment.py` - wrong imports/APIs
+  - `test_local_deployment.py`, `test_remote_mcp.py`, `test_production_server.py` - old methods
+  - `test_mcp_2_0_*.py`, `test_final_mcp_2_0.py`, `test_working_mcp_2_0.py` - development tests
+  - `test_api_key.py`, `test_simple_auth.py`, `test_security.py` - redundant/outdated
+- **Essential Tests Retained**:
+  - `test_full_functionality.py` - Core MemoryOS functionality with real API
+  - `test_user_isolation.py` - Critical security feature testing
+  - `test_server.py` - Basic MCP server functionality
+- **Current Entry Points**: 
+  - `mcp_server.py` - Direct pure MCP 2.0 server (recommended)
+  - `main.py` - Proper deployment entry point (imports from mcp_server.py)
+- **Current Documentation**: 
+  - `README.md` - Complete user guide with MCP 2.0 examples
+  - `REMOTE_MCP_DEPLOYMENT.md` - Comprehensive deployment guide with security
+- **Total Cleanup**: 19 files removed, project streamlined to essential components only
+- **Benefits**: Single source of truth, no conflicting instructions, clean project structure
+- **VERIFIED**: Only current, accurate files remain
+
 ✅ **July 08, 2025 - Documentation Sync & README.md Contradictions Fixed**
 - **DOCUMENTATION ISSUE RESOLVED**: Fixed major contradictions in README.md with pure MCP 2.0 implementation
 - **Problem**: README.md still referenced old REST API endpoints (`/api/add_memory`, `/api/retrieve_memory`) and deprecated files (`deploy_server`, `mcp_remote_server`)

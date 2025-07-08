@@ -47,6 +47,15 @@ export MCP_API_KEY="your-secure-api-key"
 python mcp_server.py
 ```
 
+#### **Strong API Key Generation**
+Generate cryptographically secure API keys:
+```bash
+# Generate secure random key (32 bytes)
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+
+# Example output: 77gOCTIGuZLslr-vIk8uTsWF0PZmMgyU8RxMKn_VZd4
+```
+
 #### **Default Key**
 If no environment variable is set, the server uses a default secure key:
 - **Default API Key**: `77gOCTIGuZLslr-vIk8uTsWF0PZmMgyU8RxMKn_VZd4`

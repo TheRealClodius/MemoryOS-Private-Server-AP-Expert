@@ -486,9 +486,8 @@ export MEMORYOS_LOG_LEVEL="INFO"                    # Logging level
 export MEMORYOS_USER_ID="alice"
 export MEMORYOS_DATA_PATH="./users/alice"
 
-# Run separate instances
-python run.py --port 5001 --user alice
-python run.py --port 5002 --user bob
+# Run server (users isolated automatically by user_id in MCP calls)
+python mcp_server.py
 ```
 
 ## 🐛 Troubleshooting
@@ -619,8 +618,8 @@ memoryos_data/
 
 ### Development
 ```bash
-# Local development with auto-reload
-python run.py --reload --debug
+# Local development
+python mcp_server.py
 
 # Test with sample data
 python simple_memory_test.py
@@ -629,7 +628,7 @@ python simple_memory_test.py
 ### Production
 ```bash
 # Production HTTP server
-PORT=5000 python run.py
+python mcp_server.py
 
 # With process management
 python mcp_server.py

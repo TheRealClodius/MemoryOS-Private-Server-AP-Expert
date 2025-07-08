@@ -4,7 +4,7 @@
 
 ✅ **MCP 2.0 Remote Server Running**
 - **URL**: `http://localhost:5000/mcp` (local development)
-- **URL**: `https://remote-mcp-server-andreiclodius.replit.app/mcp` (production)
+- **URL**: `https://memory-os-private-server-ac.replit.app/mcp` (production)
 - **Transport**: Streamable HTTP (MCP 2.0 compliant)
 - **Authentication**: API Key Required
 
@@ -20,7 +20,7 @@ The client repository at `https://github.com/TheRealClodius/autopilot-expert-exp
 ```python
 # config.py - MISSING API KEY
 MCP_SERVER_URL: str = os.getenv("MCP_SERVER_URL",
-    "https://remote-mcp-server-andreiclodius.replit.app" if os.getenv("REPLIT_DEPLOYMENT")
+    "https://memory-os-private-server-ac.replit.app" if os.getenv("REPLIT_DEPLOYMENT")
     else "http://localhost:8001")
 ```
 
@@ -28,7 +28,7 @@ MCP_SERVER_URL: str = os.getenv("MCP_SERVER_URL",
 ```python
 # config.py - ADD THIS
 MCP_SERVER_URL: str = os.getenv("MCP_SERVER_URL", 
-    "https://remote-mcp-server-andreiclodius.replit.app/mcp" if os.getenv("REPLIT_DEPLOYMENT")
+    "https://memory-os-private-server-ac.replit.app/mcp" if os.getenv("REPLIT_DEPLOYMENT")
     else "http://localhost:5000/mcp")
 MCP_API_KEY: str = os.getenv("MCP_API_KEY", "77gOCTIGuZLslr-vIk8uTsWF0PZmMgyU8RxMKn_VZd4")
 ```
@@ -37,7 +37,7 @@ MCP_API_KEY: str = os.getenv("MCP_API_KEY", "77gOCTIGuZLslr-vIk8uTsWF0PZmMgyU8Rx
 ```bash
 # Add to client .env file
 MCP_API_KEY=77gOCTIGuZLslr-vIk8uTsWF0PZmMgyU8RxMKn_VZd4
-MCP_SERVER_URL=https://remote-mcp-server-andreiclodius.replit.app/mcp
+MCP_SERVER_URL=https://memory-os-private-server-ac.replit.app/mcp
 ```
 
 ## 🔧 Client Implementation Fix

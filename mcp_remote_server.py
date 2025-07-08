@@ -20,9 +20,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from fastmcp import FastMCP
 from pydantic import BaseModel, Field
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import JSONResponse
 
 # Import our MemoryOS components
 from memoryos.memoryos import Memoryos
@@ -31,8 +28,8 @@ from memoryos.memoryos import Memoryos
 logger = logging.getLogger(__name__)
 logging.basicConfig(format="[%(levelname)s]: %(message)s", level=logging.INFO)
 
-# Authentication will be handled at the FastMCP server level
-# No need for tool-level decorators since FastMCP manages the request pipeline
+# Initialize FastMCP server with standard MCP protocol compliance
+mcp = FastMCP("MemoryOS Remote MCP Server")
 
 # Load API keys from environment or config
 def load_api_keys() -> Dict[str, str]:
@@ -67,9 +64,6 @@ def load_api_keys() -> Dict[str, str]:
             json.dump(config_data, f, indent=2)
     
     return {key: info for key, info in api_keys.items()}
-
-# Initialize FastMCP server 
-mcp = FastMCP("MemoryOS Remote MCP Server")
 
 # Load API keys
 valid_api_keys = load_api_keys()
@@ -137,115 +131,107 @@ class GetUserProfileInput(BaseModel):
     include_assistant_knowledge: bool = Field(False, description="Whether to include assistant knowledge entries")
 
 @mcp.tool()
-def add_memory(params: AddMemoryInput) -> Dict[str, Any]:
+def add_memory(user_input: str, agent_response: str, user_id: str, timestamp: str = None, meta_data: dict = None) -> dict:
     """
     Add a new memory entry to the MemoryOS system with user isolation.
     
-    Stores conversation pairs (user input + agent response) in the hierarchical memory system
-    for building persistent dialogue history and contextual understanding.
-    
     Args:
-        params: AddMemoryInput containing user_input, agent_response, user_id, optional timestamp and metadata
+        user_input: The user's input or question
+        agent_response: The agent's response
+        user_id: The user identifier for memory isolation (required)
+        timestamp: Optional timestamp in ISO format
+        meta_data: Optional metadata dictionary
     
     Returns:
         Structured result with operation status and details
     """
     try:
-        logger.info(f">>> Tool: 'add_memory' called for user '{params.user_id}'")
+        logger.info(f">>> Tool: 'add_memory' called for user '{user_id}'")
         
         # Get user-specific MemoryOS instance
-        memoryos_instance = get_memoryos_for_user(params.user_id)
+        memoryos_instance = get_memoryos_for_user(user_id)
         
         # Use provided timestamp or current time
-        timestamp = params.timestamp or datetime.now().isoformat()
+        timestamp = timestamp or datetime.now().isoformat()
         
         # Add memory to user's MemoryOS
         memoryos_instance.add_memory(
-            user_input=params.user_input,
-            agent_response=params.agent_response,
+            user_input=user_input,
+            agent_response=agent_response,
             timestamp=timestamp,
-            meta_data=params.meta_data or {}
+            meta_data=meta_data or {}
         )
         
         return {
             "status": "success",
             "message": "Memory added successfully",
             "timestamp": timestamp,
-            "user_id": params.user_id,
+            "user_id": user_id,
             "details": {
-                "user_input_length": len(params.user_input),
-                "agent_response_length": len(params.agent_response),
-                "has_metadata": bool(params.meta_data)
+                "user_input_length": len(user_input),
+                "agent_response_length": len(agent_response),
+                "has_metadata": bool(meta_data)
             }
         }
         
     except Exception as e:
-        logger.error(f"Error adding memory for user {params.user_id}: {e}")
+        logger.error(f"Error adding memory for user {user_id}: {e}")
         return {
             "status": "error",
             "message": f"Failed to add memory: {str(e)}",
             "timestamp": datetime.now().isoformat(),
-            "user_id": params.user_id
+            "user_id": user_id
         }
 
 @mcp.tool()
-def retrieve_memory(params: RetrieveMemoryInput) -> Dict[str, Any]:
+def retrieve_memory(query: str, user_id: str, relationship_with_user: str = "assistant", style_hint: str = "", max_results: int = 10) -> dict:
     """
     Retrieve relevant memories from MemoryOS system with user isolation.
     
-    Searches across all memory layers (short-term, mid-term, long-term) using semantic similarity
-    to find relevant conversation history, user knowledge, and assistant knowledge.
-    
     Args:
-        params: RetrieveMemoryInput containing query, user_id, and search parameters
+        query: Search query
+        user_id: The user identifier for memory isolation (required)
+        relationship_with_user: Relationship context
+        style_hint: Style preference
+        max_results: Maximum number of results
     
     Returns:
         Comprehensive memory context with relevant entries from all memory tiers
     """
     try:
-        logger.info(f">>> Tool: 'retrieve_memory' called for user '{params.user_id}' with query: '{params.query[:50]}...'")
+        logger.info(f">>> Tool: 'retrieve_memory' called for user '{user_id}' with query: '{query[:50]}...'")
         
         # Get user-specific MemoryOS instance
-        memoryos_instance = get_memoryos_for_user(params.user_id)
+        memoryos_instance = get_memoryos_for_user(user_id)
         
         # Retrieve memories using MemoryOS
         result = memoryos_instance.retriever.retrieve_memory(
-            query=params.query,
-            relationship_with_user=params.relationship_with_user,
-            style_hint=params.style_hint,
-            max_results=params.max_results
+            query=query,
+            relationship_with_user=relationship_with_user,
+            style_hint=style_hint,
+            max_results=max_results
         )
         
         return {
             "status": "success",
             "timestamp": datetime.now().isoformat(),
-            "user_id": params.user_id,
-            "query": params.query,
-            "user_profile": result.get("user_profile", ""),
-            "short_term_memory": result.get("short_term_memory", []),
-            "retrieved_pages": result.get("retrieved_pages", []),
-            "retrieved_user_knowledge": result.get("retrieved_user_knowledge", []),
-            "retrieved_assistant_knowledge": result.get("retrieved_assistant_knowledge", []),
-            "counts": {
-                "short_term": len(result.get("short_term_memory", [])),
-                "retrieved_pages": len(result.get("retrieved_pages", [])),
-                "user_knowledge": len(result.get("retrieved_user_knowledge", [])),
-                "assistant_knowledge": len(result.get("retrieved_assistant_knowledge", []))
-            }
+            "user_id": user_id,
+            "query": query,
+            "result": result
         }
         
     except Exception as e:
-        logger.error(f"Error retrieving memory for user {params.user_id}: {e}")
+        logger.error(f"Error retrieving memory for user {user_id}: {e}")
         return {
             "status": "error",
             "message": f"Failed to retrieve memory: {str(e)}",
             "timestamp": datetime.now().isoformat(),
-            "user_id": params.user_id,
-            "query": params.query
+            "user_id": user_id,
+            "query": query
         }
 
 @mcp.tool()
-def get_user_profile(params: GetUserProfileInput) -> Dict[str, Any]:
+def get_user_profile(user_id: str, include_knowledge: bool = True, include_assistant_knowledge: bool = False) -> dict:
     """
     Get comprehensive user profile and knowledge information with user isolation.
     

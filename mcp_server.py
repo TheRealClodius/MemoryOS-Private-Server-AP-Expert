@@ -227,11 +227,23 @@ def handle_retrieve_memory(params: Dict[str, Any]) -> Dict[str, Any]:
         style_hint = actual_params.get("style_hint", "")
         max_results = actual_params.get("max_results", 10)
         
-        if not all([query, user_id]):
+        # Validate user_id
+        if not user_id:
             return {
                 "error": {
                     "code": -32602,
-                    "message": "Invalid parameters: query and user_id are required"
+                    "message": "Invalid params",
+                    "data": {"message": "User ID is required"}
+                }
+            }
+        
+        # Validate query - check for None, empty string, or whitespace-only
+        if not query or not query.strip():
+            return {
+                "error": {
+                    "code": -32602,
+                    "message": "Invalid params",
+                    "data": {"message": "Search query cannot be empty"}
                 }
             }
         

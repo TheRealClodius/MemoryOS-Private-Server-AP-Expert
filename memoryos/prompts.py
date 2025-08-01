@@ -59,6 +59,72 @@ Extract knowledge points that will help the assistant provide more personalized 
 Assistant Knowledge:
 """
 
+# Enhanced assistant knowledge extraction with execution context
+ASSISTANT_KNOWLEDGE_WITH_EXECUTION_PROMPT = """
+From the following conversation and its execution details, extract comprehensive information that would be valuable for the assistant to remember for providing better future assistance. Focus on:
+
+1. User's preferred communication style and task approach
+2. Types of help or information the user frequently needs
+3. Domain expertise and technical proficiency shown
+4. Problem-solving approaches that work well with this user
+5. Tool preferences and execution patterns
+6. Context about ongoing projects or interests
+
+Conversation:
+User: {user_input}
+Assistant: {agent_response}
+
+Execution Context:
+Tools Used: {tools_used}
+Success: {success}
+Duration: {duration_ms}ms
+Execution Summary: {execution_summary}
+
+Extract knowledge points that combine conversational insights with execution patterns to help the assistant provide more personalized and effective assistance in future interactions.
+
+Enhanced Assistant Knowledge:
+"""
+
+# Execution knowledge extraction prompt
+EXECUTION_KNOWLEDGE_PROMPT = """
+From the following execution details, extract information that would be valuable for the assistant to remember for improving future execution patterns and tool usage. Focus on:
+
+1. Tool usage patterns and effectiveness
+2. Common error patterns and their resolutions
+3. Performance insights and optimization opportunities
+4. Successful execution strategies
+5. Context about task complexity and approaches
+
+Execution Details:
+Summary: {execution_summary}
+Tools Used: {tools_used}
+Success: {success}
+Duration: {duration_ms}ms
+Errors: {errors}
+Observations: {observations}
+
+Extract knowledge points that will help the assistant provide more effective tool usage and execution strategies in future interactions.
+
+Execution Knowledge:
+"""
+
+# Execution pattern analysis prompt
+EXECUTION_PATTERN_ANALYSIS_PROMPT = """
+Analyze the following execution patterns to extract insights about tool usage, success patterns, and optimization opportunities:
+
+Execution History:
+{execution_history}
+
+Provide analysis on:
+1. Most effective tool combinations
+2. Common failure patterns and how to avoid them
+3. Performance optimization insights
+4. Task complexity indicators
+5. Recommended execution strategies
+
+Pattern Analysis:
+"""
+
 # Memory consolidation prompt
 MEMORY_CONSOLIDATION_PROMPT = """
 Consolidate the following conversation segments into a coherent summary that captures the key themes, important information, and interaction patterns:

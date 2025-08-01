@@ -74,6 +74,7 @@ class ShortTermMemory:
         self, 
         user_input: str, 
         agent_response: str, 
+        message_id: Optional[str] = None,
         timestamp: Optional[str] = None,
         meta_data: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
@@ -83,6 +84,7 @@ class ShortTermMemory:
         Args:
             user_input: The user's input/question
             agent_response: The agent's response
+            message_id: Optional message ID for linking conversation and execution memories
             timestamp: Optional timestamp (uses current time if not provided)
             meta_data: Optional metadata dictionary
             
@@ -92,7 +94,13 @@ class ShortTermMemory:
         if timestamp is None:
             timestamp = get_timestamp()
         
+        # Generate message_id if not provided
+        if message_id is None:
+            import uuid
+            message_id = str(uuid.uuid4())
+        
         qa_pair = {
+            "message_id": message_id,
             "user_input": user_input,
             "agent_response": agent_response,
             "timestamp": timestamp,

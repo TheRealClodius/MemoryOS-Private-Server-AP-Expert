@@ -10,6 +10,7 @@ import openai
 from .short_term import ShortTermMemory
 from .mid_term import MidTermMemory
 from .long_term import LongTermMemory
+from .execution_memory import ExecutionMemory
 from .retriever import MemoryRetriever
 from .updater import MemoryUpdater
 from .utils import get_timestamp, ensure_directory_exists
@@ -87,6 +88,12 @@ class Memoryos:
             knowledge_capacity=long_term_knowledge_capacity
         )
         
+        self.execution_memory = ExecutionMemory(
+            user_id=user_id,
+            data_path=data_storage_path,
+            capacity=short_term_capacity * 2  # Allow more execution records than conversations
+        )
+        
         self.retriever = MemoryRetriever(
             short_term_memory=self.short_term_memory,
             mid_term_memory=self.mid_term_memory,
@@ -130,19 +137,21 @@ class Memoryos:
             print(f"Error calling LLM: {e}")
             return ""
     
-    def add_memory(
+    def add_conversation_memory(
         self,
         user_input: str,
         agent_response: str,
+        message_id: Optional[str] = None,
         timestamp: Optional[str] = None,
         meta_data: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        Add a new memory (user input and agent response pair)
+        Add a new conversation memory (user input and agent response pair)
         
         Args:
             user_input: The user's input
             agent_response: The agent's response
+            message_id: Optional message ID for linking conversation and execution memories
             timestamp: Optional timestamp
             meta_data: Optional metadata
             
@@ -154,6 +163,7 @@ class Memoryos:
             qa_pair = self.short_term_memory.add_qa_pair(
                 user_input=user_input,
                 agent_response=agent_response,
+                message_id=message_id,
                 timestamp=timestamp,
                 meta_data=meta_data
             )
@@ -169,14 +179,131 @@ class Memoryos:
             
             return {
                 "status": "success",
-                "message": "Memory added successfully",
+                "message": "Conversation memory added successfully",
                 "qa_pair": qa_pair
             }
         
         except Exception as e:
             return {
                 "status": "error",
-                "message": f"Error adding memory: {str(e)}"
+                "message": f"Error adding conversation memory: {str(e)}"
+            }
+    
+    def add_execution_memory(
+        self,
+        message_id: str,
+        execution_summary: str,
+        tools_used: List[str],
+        errors: List[Dict[str, str]],
+        observations: str,
+        success: bool,
+        duration_ms: Optional[int] = None,
+        timestamp: Optional[str] = None,
+        meta_data: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Add execution memory linked to a conversation via message_id
+        
+        Args:
+            message_id: Message ID linking to conversation memory
+            execution_summary: Summary of what was executed
+            tools_used: List of tools used in chronological order
+            errors: List of error dictionaries
+            observations: Observations about the execution
+            success: Whether the execution was successful
+            duration_ms: Execution duration in milliseconds
+            timestamp: Optional timestamp
+            meta_data: Optional metadata
+            
+        Returns:
+            Dictionary with operation result
+        """
+        try:
+            # Generate embedding for the execution details
+            execution_text = f"{execution_summary} {' '.join(tools_used)} {observations}"
+            embedding = self._generate_embedding(execution_text)
+            
+            # Add to execution memory
+            execution_record = self.execution_memory.add_execution(
+                message_id=message_id,
+                execution_summary=execution_summary,
+                tools_used=tools_used,
+                errors=errors,
+                observations=observations,
+                success=success,
+                duration_ms=duration_ms,
+                timestamp=timestamp,
+                meta_data=meta_data,
+                embedding=embedding
+            )
+            
+            return {
+                "status": "success",
+                "message": "Execution memory added successfully",
+                "execution_record": execution_record
+            }
+        
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Error adding execution memory: {str(e)}"
+            }
+    
+    def retrieve_execution_memory(
+        self,
+        query: str,
+        message_id: Optional[str] = None,
+        max_results: int = 10
+    ) -> Dict[str, Any]:
+        """
+        Retrieve execution memory records
+        
+        Args:
+            query: Search query for execution patterns
+            message_id: Optional specific message_id to retrieve
+            max_results: Maximum number of results to return
+            
+        Returns:
+            Dictionary with retrieved execution records
+        """
+        try:
+            results = []
+            
+            # If message_id is provided, get specific execution
+            if message_id:
+                execution = self.execution_memory.get_execution_by_message_id(message_id)
+                if execution:
+                    results.append(execution)
+            else:
+                # Search by embedding similarity
+                query_embedding = self._generate_embedding(query)
+                embedding_results = self.execution_memory.search_by_embedding(
+                    query_embedding, 
+                    top_k=max_results,
+                    similarity_threshold=0.3
+                )
+                
+                for execution_record, similarity in embedding_results:
+                    execution_record["similarity_score"] = similarity
+                    results.append(execution_record)
+            
+            # Get execution patterns for additional context
+            patterns = self.execution_memory.get_execution_patterns()
+            
+            return {
+                "status": "success",
+                "timestamp": get_timestamp(),
+                "query": query,
+                "message_id": message_id,
+                "results": results,
+                "execution_patterns": patterns,
+                "total_found": len(results)
+            }
+        
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Error retrieving execution memory: {str(e)}"
             }
     
     def get_response(

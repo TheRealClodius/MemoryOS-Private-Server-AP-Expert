@@ -608,6 +608,38 @@ def handle_retrieve_execution_memory(params: Dict[str, Any]) -> Dict[str, Any]:
 
 # MCP 2.0 Tool Registry - Dual Memory System
 MCP_TOOLS = {
+    # Legacy tools (backward compatibility)
+    "add_memory": {
+        "name": "add_memory",
+        "description": "Add a new memory entry to the MemoryOS system with user isolation (legacy - use add_conversation_memory instead)",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "user_input": {"type": "string", "description": "The user's input or question"},
+                "agent_response": {"type": "string", "description": "The agent's response"},
+                "user_id": {"type": "string", "description": "The user identifier for memory isolation"},
+                "timestamp": {"type": "string", "description": "Optional timestamp in ISO format"},
+                "meta_data": {"type": "object", "description": "Optional metadata dictionary"}
+            },
+            "required": ["user_input", "agent_response", "user_id"]
+        },
+        "handler": handle_add_conversation_memory  # Reuse new handler
+    },
+    "retrieve_memory": {
+        "name": "retrieve_memory",
+        "description": "Retrieve relevant memories from MemoryOS system with user isolation (legacy - use retrieve_conversation_memory instead)",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query"},
+                "user_id": {"type": "string", "description": "The user identifier for memory isolation"},
+                "max_results": {"type": "integer", "description": "Maximum number of results", "default": 10}
+            },
+            "required": ["query", "user_id"]
+        },
+        "handler": handle_retrieve_conversation_memory  # Reuse new handler
+    },
+    
     # Core dual memory system tools
     "add_conversation_memory": {
         "name": "add_conversation_memory",

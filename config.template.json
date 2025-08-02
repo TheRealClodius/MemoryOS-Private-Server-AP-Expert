@@ -1,7 +1,7 @@
 {
+  "_comment": "Note: user_id is not configured here. User IDs are dynamic and passed via MCP tool call parameters for proper user isolation.",
   "memoryos": {
     "openai_api_key": "your-openai-api-key-here",
-    "user_id": "default_user",
     "assistant_id": "claude_assistant",
     "memory_data_path": "./memoryos_data",
     "openai_base_url": "https://api.openai.com/v1",

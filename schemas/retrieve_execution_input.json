@@ -20,14 +20,25 @@
       "maxLength": 4000,
       "description": "Search query for execution patterns to learn from (e.g. 'weather tool usage', 'error handling strategies', 'successful debugging approaches', 'API integration patterns')"
     },
+    "user_id": {
+      "type": "string",
+      "description": "User identifier for execution memory isolation (required for data privacy)"
+    },
     "max_results": {
       "type": "integer",
       "minimum": 1,
       "maximum": 50,
       "default": 10,
       "description": "Maximum number of execution records to return"
+    },
+
+    "retrieval_strategy": {
+      "type": "string",
+      "enum": ["hybrid", "recent", "keyword"],
+      "default": "hybrid",
+      "description": "Strategy for execution memory retrieval: hybrid (semantic search), recent (pure recency), keyword (keyword matching in execution details)"
     }
   },
-  "required": ["explanation", "query"],
+  "required": ["explanation", "query", "user_id"],
   "additionalProperties": false
 } 

@@ -309,6 +309,7 @@ def handle_retrieve_conversation_memory(params: Dict[str, Any]) -> Dict[str, Any
         message_id = actual_params.get("message_id")
         time_range = actual_params.get("time_range")
         max_results = actual_params.get("max_results", 10)
+        retrieval_strategy = actual_params.get("retrieval_strategy", "hybrid")
         
         if not all([explanation, query, user_id]):
             return {
@@ -323,11 +324,93 @@ def handle_retrieve_conversation_memory(params: Dict[str, Any]) -> Dict[str, Any
         # Get user-specific MemoryOS instance
         memoryos_instance = get_memoryos_for_user(user_id)
         
-        # Retrieve memories using MemoryOS
-        result = memoryos_instance.retriever.retrieve_context(
-            user_query=query,
-            user_id=user_id
-        )
+        # Generate query embedding for comprehensive memory search
+        query_embedding = memoryos_instance._generate_embedding(query)
+        
+        # Import datetime for all time operations
+        from datetime import datetime, timedelta
+        
+        # Handle time_range filtering if provided
+        if time_range:
+            # Use time-filtered retrieval from short-term memory
+            
+            # Get time boundaries
+            end_time = datetime.now()
+            start_time = None
+            
+            if "start" in time_range:
+                try:
+                    start_time = datetime.fromisoformat(time_range["start"].replace('Z', '+00:00'))
+                except ValueError:
+                    pass
+            
+            if "end" in time_range:
+                try:
+                    end_time = datetime.fromisoformat(time_range["end"].replace('Z', '+00:00'))
+                except ValueError:
+                    pass
+            
+            # Calculate hours for time filtering
+            if start_time:
+                hours_back = int((end_time - start_time).total_seconds() / 3600)
+            else:
+                hours_back = 24  # Default to 24 hours
+            
+            # Get time-filtered short-term memories
+            time_filtered_memories = memoryos_instance.short_term_memory.get_by_timeframe(hours_back)
+            
+            # Apply query filtering to time-filtered results
+            filtered_results = []
+            query_words = set(query.lower().split())
+            
+            for entry in time_filtered_memories:
+                user_input_words = set(entry.get("user_input", "").lower().split())
+                agent_response_words = set(entry.get("agent_response", "").lower().split())
+                
+                user_overlap = len(query_words.intersection(user_input_words))
+                agent_overlap = len(query_words.intersection(agent_response_words))
+                
+                score = user_overlap * 2 + agent_overlap
+                entry["similarity_score"] = score if score > 0 else 0.1
+                
+                filtered_results.append(entry)
+            
+            # Sort by relevance
+            filtered_results.sort(key=lambda x: x.get("similarity_score", 0.1), reverse=True)
+            
+            result = {
+                "short_term_memory": filtered_results,
+                "retrieved_pages": [],  # Time filtering focuses on short-term
+                "retrieved_user_knowledge": [],
+                "retrieved_assistant_knowledge": []
+            }
+        else:
+            # Handle different retrieval strategies
+            if retrieval_strategy == "recent":
+                # Pure recency - just get most recent entries
+                recent_memories = memoryos_instance.short_term_memory.get_recent(max_results)
+                result = {
+                    "short_term_memory": recent_memories,
+                    "retrieved_pages": [],
+                    "retrieved_user_knowledge": [],
+                    "retrieved_assistant_knowledge": []
+                }
+            elif retrieval_strategy == "keyword":
+                # Pure keyword search
+                keyword_memories = memoryos_instance.short_term_memory.search_by_keyword(query)[:max_results]
+                result = {
+                    "short_term_memory": keyword_memories,
+                    "retrieved_pages": [],
+                    "retrieved_user_knowledge": [],
+                    "retrieved_assistant_knowledge": []
+                }
+            else:
+                # Standard hybrid retrieval across all memory layers (default)
+                result = memoryos_instance.retriever.retrieve_context(
+                    user_query=query,
+                    user_id=user_id,
+                    query_embedding=query_embedding
+                )
         
         # Format for conversation memory schema
         conversations = []
@@ -370,6 +453,7 @@ def handle_retrieve_conversation_memory(params: Dict[str, Any]) -> Dict[str, Any
                         "query": query,
                         "explanation": explanation,
                         "query_type": query_type,
+                        "retrieval_strategy": retrieval_strategy,
                         "requested_message_id": message_id,
                         "retrieval_timestamp": datetime.now().isoformat(),
                         "time_range": time_range,
@@ -396,6 +480,7 @@ def handle_retrieve_conversation_memory(params: Dict[str, Any]) -> Dict[str, Any
                         "query": actual_params.get("query", ""),
                         "explanation": actual_params.get("explanation", ""),
                         "query_type": "error",
+                        "retrieval_strategy": actual_params.get("retrieval_strategy", "hybrid"),
                         "retrieval_timestamp": datetime.now().isoformat(),
                         "conversations": [],
                         "total_found": 0,
@@ -518,6 +603,7 @@ def handle_retrieve_execution_memory(params: Dict[str, Any]) -> Dict[str, Any]:
         user_id = actual_params.get("user_id")
         message_id = actual_params.get("message_id")
         max_results = actual_params.get("max_results", 10)
+        retrieval_strategy = actual_params.get("retrieval_strategy", "hybrid")
         
         if not all([explanation, query, user_id]):
             return {
@@ -529,15 +615,74 @@ def handle_retrieve_execution_memory(params: Dict[str, Any]) -> Dict[str, Any]:
         
         logger.info(f">>> Tool: 'retrieve_execution_memory' called for user '{user_id}' with query: '{query[:50]}...'")
         
+        # Import datetime for timestamp operations
+        from datetime import datetime
+        
         # Get user-specific MemoryOS instance
         memoryos_instance = get_memoryos_for_user(user_id)
         
-        # Retrieve execution memories
-        result = memoryos_instance.retrieve_execution_memory(
-            query=query,
-            message_id=message_id,
-            max_results=max_results
-        )
+        # Handle different retrieval strategies
+        if message_id:
+            # Direct message ID lookup (overrides strategy)
+            result = memoryos_instance.retrieve_execution_memory(
+                query=query,
+                message_id=message_id,
+                max_results=max_results
+            )
+        elif retrieval_strategy == "recent":
+            # Get most recent execution records
+            recent_executions = list(memoryos_instance.execution_memory.executions)[-max_results:]
+            result = {
+                "status": "success",
+                "timestamp": datetime.now().isoformat(),
+                "query": query,
+                "message_id": None,
+                "results": recent_executions,
+                "execution_patterns": memoryos_instance.execution_memory.get_execution_patterns(),
+                "total_found": len(recent_executions)
+            }
+        elif retrieval_strategy == "keyword":
+            # Keyword search in execution details
+            keyword_results = []
+            query_words = set(query.lower().split())
+            
+            for execution in memoryos_instance.execution_memory.executions:
+                # Search in execution_summary, tools_used, and observations
+                searchable_text = " ".join([
+                    execution.get("execution_summary", ""),
+                    " ".join(execution.get("tools_used", [])),
+                    execution.get("observations", "")
+                ]).lower()
+                
+                # Check for keyword matches
+                text_words = set(searchable_text.split())
+                matches = len(query_words.intersection(text_words))
+                
+                if matches > 0:
+                    execution_copy = execution.copy()
+                    execution_copy["similarity_score"] = matches / len(query_words)  # Match ratio
+                    keyword_results.append(execution_copy)
+            
+            # Sort by match score and limit results
+            keyword_results.sort(key=lambda x: x.get("similarity_score", 0), reverse=True)
+            keyword_results = keyword_results[:max_results]
+            
+            result = {
+                "status": "success",
+                "timestamp": datetime.now().isoformat(),
+                "query": query,
+                "message_id": None,
+                "results": keyword_results,
+                "execution_patterns": memoryos_instance.execution_memory.get_execution_patterns(),
+                "total_found": len(keyword_results)
+            }
+        else:
+            # Default hybrid (semantic embedding search)
+            result = memoryos_instance.retrieve_execution_memory(
+                query=query,
+                message_id=message_id,
+                max_results=max_results
+            )
         
         # Format for execution memory schema
         executions = []
@@ -570,6 +715,7 @@ def handle_retrieve_execution_memory(params: Dict[str, Any]) -> Dict[str, Any]:
                         "query": query,
                         "explanation": explanation,
                         "query_type": query_type,
+                        "retrieval_strategy": retrieval_strategy,
                         "requested_message_id": message_id,
                         "retrieval_timestamp": datetime.now().isoformat(),
                         "executions": executions[:max_results],
@@ -595,6 +741,7 @@ def handle_retrieve_execution_memory(params: Dict[str, Any]) -> Dict[str, Any]:
                         "query": actual_params.get("query", ""),
                         "explanation": actual_params.get("explanation", ""),
                         "query_type": "error",
+                        "retrieval_strategy": actual_params.get("retrieval_strategy", "hybrid"),
                         "retrieval_timestamp": datetime.now().isoformat(),
                         "executions": [],
                         "total_found": 0,

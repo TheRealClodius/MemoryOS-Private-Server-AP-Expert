@@ -185,7 +185,7 @@ def handle_get_user_profile(params: Dict[str, Any]) -> Dict[str, Any]:
             
         # Include assistant knowledge if requested
         if include_assistant_knowledge:
-            assistant_knowledge = memoryos_instance.assistant_long_term_memory.get_assistant_knowledge()
+            assistant_knowledge = memoryos_instance.user_long_term_memory.get_assistant_knowledge()
             result["assistant_knowledge"] = assistant_knowledge
             result["assistant_knowledge_count"] = len(assistant_knowledge)
         

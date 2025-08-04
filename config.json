@@ -11,9 +11,9 @@
   "llm_model": "gpt-4o-mini",
   "embedding_model": "text-embedding-3-small",
   "api_keys": {
-    "your-api-key-here": {
-      "user": "your_user_id",
-      "description": "Your API key description"
+    "77gOCTIGuZLslr-vIk8uTsWF0PZmMgyU8RxMKn_VZd4": {
+      "user": "default_user",
+      "description": "Default MCP server API key"
     }
   }
 }

@@ -22,7 +22,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python mcp_server.py"
+args = "python deploy_server.py"
 waitForPort = 5000
 
 [deployment]

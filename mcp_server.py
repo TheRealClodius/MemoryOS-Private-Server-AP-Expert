@@ -252,6 +252,7 @@ def handle_add_conversation_memory(params: Dict[str, Any]) -> Dict[str, Any]:
         result = memoryos_instance.add_conversation_memory(
             user_input=user_input,
             agent_response=agent_response,
+            user_id=user_id,
             message_id=message_id,
             timestamp=timestamp,
             meta_data=meta_data,
@@ -283,6 +284,16 @@ def handle_add_conversation_memory(params: Dict[str, Any]) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Error in add_conversation_memory: {e}")
+        # Extract parameters safely for error reporting
+        try:
+            arguments = params.get("arguments", {})
+            if "params" in arguments:
+                error_params = arguments["params"]
+            else:
+                error_params = arguments
+        except:
+            error_params = {}
+            
         return {
             "content": [{
                 "type": "text",
@@ -291,7 +302,7 @@ def handle_add_conversation_memory(params: Dict[str, Any]) -> Dict[str, Any]:
                     "message": f"Error adding conversation memory: {str(e)}",
                     "data": {
                         "status": "error",
-                        "message_id": actual_params.get("message_id", "unknown"),
+                        "message_id": error_params.get("message_id", "unknown"),
                         "timestamp": datetime.now().isoformat()
                     }
                 })
@@ -333,10 +344,10 @@ def handle_retrieve_conversation_memory(params: Dict[str, Any]) -> Dict[str, Any
         # Get memories using the unified retrieval function with tag filtering
         result = memoryos_instance.retrieve_conversation_memory(
             query=query,
-                    user_id=user_id,
+            user_id=user_id,
             max_results=max_results,
             tags_filter=tags_filter
-                )
+        )
         
         # Format the results
         conversations = []
@@ -376,6 +387,16 @@ def handle_retrieve_conversation_memory(params: Dict[str, Any]) -> Dict[str, Any
         
     except Exception as e:
         logger.error(f"Error in retrieve_conversation_memory: {e}")
+        # Extract parameters safely for error reporting
+        try:
+            arguments = params.get("arguments", {})
+            if "params" in arguments:
+                error_params = arguments["params"]
+            else:
+                error_params = arguments
+        except:
+            error_params = {}
+            
         return {
             "content": [{
                 "type": "text",
@@ -384,10 +405,10 @@ def handle_retrieve_conversation_memory(params: Dict[str, Any]) -> Dict[str, Any
                     "message": f"Error retrieving conversation memory: {str(e)}",
                     "data": {
                         "status": "error",
-                        "query": actual_params.get("query", ""),
-                        "explanation": actual_params.get("explanation", ""),
+                        "query": error_params.get("query", ""),
+                        "explanation": error_params.get("explanation", ""),
                         "query_type": "error",
-                        "retrieval_strategy": actual_params.get("retrieval_strategy", "hybrid"),
+                        "retrieval_strategy": error_params.get("retrieval_strategy", "hybrid"),
                         "retrieval_timestamp": datetime.now().isoformat(),
                         "conversations": [],
                         "total_found": 0,
@@ -545,7 +566,7 @@ async def handle_mcp_request(request: Request, api_key: str = Security(verify_ap
             params = mcp_request.params or {}
             tool_name = params.get("name")
             
-            if tool_name not in MCP_TOOLS:
+            if not tool_name or tool_name not in MCP_TOOLS:
                 return JSONResponse({
                     "jsonrpc": "2.0",
                     "id": mcp_request.id,
@@ -582,9 +603,17 @@ async def handle_mcp_request(request: Request, api_key: str = Security(verify_ap
     
     except Exception as e:
         logger.error(f"MCP request error: {e}")
+        # Try to get request ID safely from the parsed JSON
+        request_id = None
+        try:
+            body = await request.json()
+            request_id = body.get('id')
+        except:
+            pass
+            
         return JSONResponse({
             "jsonrpc": "2.0",
-            "id": getattr(mcp_request, 'id', None) if 'mcp_request' in locals() else None,
+            "id": request_id,
             "error": {
                 "code": -32603,
                 "message": "Internal error",
@@ -597,11 +626,14 @@ async def main():
     logger.info("Starting MemoryOS Pure MCP 2.0 Remote Server")
     logger.info(f"API Keys loaded: {len(api_keys)}")
     
+    # Get port from environment for deployment compatibility
+    port = int(os.environ.get("PORT", 5000))
+    
     # Run the server
     config = uvicorn.Config(
         app,
         host="0.0.0.0",
-        port=5000,
+        port=port,
         log_level="info"
     )
     server = uvicorn.Server(config)

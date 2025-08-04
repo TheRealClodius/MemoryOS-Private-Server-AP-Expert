@@ -3,6 +3,7 @@ Main MemoryOS class - orchestrates all memory components
 """
 
 import os
+import asyncio
 import numpy as np
 from typing import Dict, List, Optional, Any
 import openai
@@ -165,8 +166,8 @@ class Memoryos:
                 success=success
             )
             
-            # Asynchronous consolidation task
-            asyncio.create_task(self.consolidate_memories())
+            # Note: Consolidation handled separately to avoid event loop issues in thread execution
+            # The updater handles this automatically when capacity is exceeded
             
             return {
                 "status": "success",

@@ -480,6 +480,8 @@ async def verify_api_key(credentials = Security(security)):
         )
     
     api_key = credentials.credentials
+    logger.info(f"Received API key: {api_key[:8]}... (truncated)")
+    logger.info(f"Available keys: {list(api_keys.keys())[:1] if api_keys else 'None'}")
     if api_key not in api_keys:
         raise HTTPException(
             status_code=401,

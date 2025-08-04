@@ -36,32 +36,7 @@ def load_schema(schema_name: str) -> Dict[str, Any]:
         raise json.JSONDecodeError(f"Invalid JSON in schema file {schema_path}: {e}")
 
 
-def get_all_schemas() -> Dict[str, Dict[str, Any]]:
-    """
-    Load all available schemas
-    
-    Returns:
-        Dictionary mapping schema names to schema content
-    """
-    schemas = {}
-    schema_files = [
-        "add_conversation_input.json",
-        "add_conversation_output.json", 
-        "add_execution_input.json",
-        "add_execution_output.json",
-        "retrieve_conversation_input.json",
-        "retrieve_conversation_output.json",
-        "retrieve_execution_input.json",
-        "retrieve_execution_output.json"
-    ]
-    
-    for schema_file in schema_files:
-        try:
-            schemas[schema_file] = load_schema(schema_file)
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            print(f"Warning: Could not load schema {schema_file}: {e}")
-    
-    return schemas
+
 
 
 def validate_input(data: Dict[str, Any], schema: Dict[str, Any]) -> tuple[bool, str]:

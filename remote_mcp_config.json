@@ -2,7 +2,7 @@
   "mcpServers": {
     "memoryos-remote": {
       "command": "python",
-      "args": ["mcp_remote_server.py"],
+      "args": ["mcp_server.py"],
       "env": {
         "OPENAI_API_KEY": "${OPENAI_API_KEY}",
         "PORT": "5000"

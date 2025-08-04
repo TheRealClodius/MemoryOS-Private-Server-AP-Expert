@@ -92,30 +92,26 @@ def load_api_keys() -> Dict[str, str]:
 api_keys = load_api_keys()
 
 # User-specific MemoryOS instances
-user_memory_instances: Dict[str, Memoryos] = {}
-
 def get_memoryos_for_user(user_id: str, assistant_id: str = "mcp_assistant") -> Memoryos:
     """Get or create MemoryOS instance for specific user with proper isolation"""
-    if user_id not in user_memory_instances:
-        logger.info(f"Creating new MemoryOS instance for user: {user_id}")
-        config = load_config()
-        
-        # Create MemoryOS with correct constructor parameters
-        user_memory_instances[user_id] = Memoryos(
-            user_id=user_id,
-            openai_api_key=config.get("openai_api_key", os.getenv("OPENAI_API_KEY")),
-            data_storage_path=config.get("data_storage_path", "./memoryos_data"),
-            assistant_id=assistant_id,
-            openai_base_url=config.get("openai_base_url"),
-            short_term_capacity=config.get("short_term_capacity", 7),
-            mid_term_capacity=config.get("mid_term_capacity", 2000),
-            long_term_knowledge_capacity=config.get("long_term_knowledge_capacity", 100),
-            retrieval_queue_capacity=config.get("retrieval_queue_capacity", 7),
-            mid_term_heat_threshold=config.get("mid_term_heat_threshold", 5.0),
-            llm_model=config.get("llm_model", "gpt-4o-mini"),
-            embedding_model=config.get("embedding_model", "text-embedding-3-small")
-        )
-    return user_memory_instances[user_id]
+    logger.info(f"Creating new MemoryOS instance for user: {user_id}")
+    config = load_config()
+    
+    # Create MemoryOS with correct constructor parameters
+    return Memoryos(
+        user_id=user_id,
+        openai_api_key=config.get("openai_api_key", os.getenv("OPENAI_API_KEY")),
+        data_storage_path=config.get("data_storage_path", "./memoryos_data"),
+        assistant_id=assistant_id,
+        openai_base_url=config.get("openai_base_url"),
+        short_term_capacity=config.get("short_term_capacity", 7),
+        mid_term_capacity=config.get("mid_term_capacity", 2000),
+        long_term_knowledge_capacity=config.get("long_term_knowledge_capacity", 100),
+        retrieval_queue_capacity=config.get("retrieval_queue_capacity", 7),
+        mid_term_heat_threshold=config.get("mid_term_heat_threshold", 5.0),
+        llm_model=config.get("llm_model", "gpt-4o-mini"),
+        embedding_model=config.get("embedding_model", "text-embedding-3-small")
+    )
 
 # MCP 2.0 JSON-RPC Request/Response Models
 class MCPRequest(BaseModel):
@@ -239,19 +235,30 @@ def handle_add_conversation_memory(params: Dict[str, Any]) -> Dict[str, Any]:
         
         logger.info(f">>> Tool: 'add_conversation_memory' called for user '{user_id}' with message_id '{message_id}'")
         
+        # Extract execution details if provided
+        execution_details = actual_params.get("execution_details", {})
+        tools_used = execution_details.get("tools_used")
+        errors = execution_details.get("errors")
+        duration_ms = execution_details.get("duration_ms")
+        success = execution_details.get("success")
+
         # Get user-specific MemoryOS instance
         memoryos_instance = get_memoryos_for_user(user_id)
         
         # Use provided timestamp or current time
         timestamp = timestamp or datetime.now().isoformat()
         
-        # Add conversation memory
+        # Add conversation memory, now including execution details
         result = memoryos_instance.add_conversation_memory(
             user_input=user_input,
             agent_response=agent_response,
             message_id=message_id,
             timestamp=timestamp,
-            meta_data=meta_data
+            meta_data=meta_data,
+            tools_used=tools_used,
+            errors=errors,
+            duration_ms=duration_ms,
+            success=success
         )
         
         return {
@@ -307,9 +314,8 @@ def handle_retrieve_conversation_memory(params: Dict[str, Any]) -> Dict[str, Any
         query = actual_params.get("query")
         user_id = actual_params.get("user_id")
         message_id = actual_params.get("message_id")
-        time_range = actual_params.get("time_range")
         max_results = actual_params.get("max_results", 10)
-        retrieval_strategy = actual_params.get("retrieval_strategy", "hybrid")
+        tags_filter = actual_params.get("tags_filter")
         
         if not all([explanation, query, user_id]):
             return {
@@ -324,125 +330,27 @@ def handle_retrieve_conversation_memory(params: Dict[str, Any]) -> Dict[str, Any
         # Get user-specific MemoryOS instance
         memoryos_instance = get_memoryos_for_user(user_id)
         
-        # Only generate embedding if needed for hybrid search (not for recent/keyword strategies)
-        query_embedding = None
-        if retrieval_strategy == "hybrid" and not time_range:
-            query_embedding = memoryos_instance._generate_embedding(query)
-        
-        # Import datetime for all time operations
-        from datetime import datetime, timedelta
-        
-        # Handle time_range filtering if provided
-        if time_range:
-            # Use time-filtered retrieval from short-term memory
-            
-            # Get time boundaries
-            end_time = datetime.now()
-            start_time = None
-            
-            if "start" in time_range:
-                try:
-                    start_time = datetime.fromisoformat(time_range["start"].replace('Z', '+00:00'))
-                except ValueError:
-                    pass
-            
-            if "end" in time_range:
-                try:
-                    end_time = datetime.fromisoformat(time_range["end"].replace('Z', '+00:00'))
-                except ValueError:
-                    pass
-            
-            # Calculate hours for time filtering
-            if start_time:
-                hours_back = int((end_time - start_time).total_seconds() / 3600)
-            else:
-                hours_back = 24  # Default to 24 hours
-            
-            # Get time-filtered short-term memories
-            time_filtered_memories = memoryos_instance.short_term_memory.get_by_timeframe(hours_back)
-            
-            # Apply query filtering to time-filtered results
-            filtered_results = []
-            query_words = set(query.lower().split())
-            
-            for entry in time_filtered_memories:
-                user_input_words = set(entry.get("user_input", "").lower().split())
-                agent_response_words = set(entry.get("agent_response", "").lower().split())
-                
-                user_overlap = len(query_words.intersection(user_input_words))
-                agent_overlap = len(query_words.intersection(agent_response_words))
-                
-                score = user_overlap * 2 + agent_overlap
-                entry["similarity_score"] = score if score > 0 else 0.1
-                
-                filtered_results.append(entry)
-            
-            # Sort by relevance
-            filtered_results.sort(key=lambda x: x.get("similarity_score", 0.1), reverse=True)
-            
-            result = {
-                "short_term_memory": filtered_results,
-                "retrieved_pages": [],  # Time filtering focuses on short-term
-                "retrieved_user_knowledge": [],
-                "retrieved_assistant_knowledge": []
-            }
-        else:
-            # Handle different retrieval strategies
-            if retrieval_strategy == "recent":
-                # Pure recency - just get most recent entries
-                recent_memories = memoryos_instance.short_term_memory.get_recent(max_results)
-                result = {
-                    "short_term_memory": recent_memories,
-                    "retrieved_pages": [],
-                    "retrieved_user_knowledge": [],
-                    "retrieved_assistant_knowledge": []
-                }
-            elif retrieval_strategy == "keyword":
-                # Pure keyword search
-                keyword_memories = memoryos_instance.short_term_memory.search_by_keyword(query)[:max_results]
-                result = {
-                    "short_term_memory": keyword_memories,
-                    "retrieved_pages": [],
-                    "retrieved_user_knowledge": [],
-                    "retrieved_assistant_knowledge": []
-                }
-            else:
-                # Standard hybrid retrieval across all memory layers (default)
-                result = memoryos_instance.retriever.retrieve_context(
-                    user_query=query,
+        # Get memories using the unified retrieval function with tag filtering
+        result = memoryos_instance.retrieve_conversation_memory(
+            query=query,
                     user_id=user_id,
-                    query_embedding=query_embedding
+            max_results=max_results,
+            tags_filter=tags_filter
                 )
         
-        # Format for conversation memory schema
+        # Format the results
         conversations = []
-        for entry in result.get("short_term_memory", [])[:max_results]:
+        for entry in result.get("results", []):
             conversations.append({
                 "message_id": entry.get("message_id", "unknown"),
                 "conversation_timestamp": entry.get("timestamp", ""),
                 "user_input": entry.get("user_input", ""),
                 "agent_response": entry.get("agent_response", ""),
                 "meta_data": entry.get("meta_data", {}),
-                "has_execution_memory": False,  # TODO: Check if execution exists
-                "relevance_score": entry.get("similarity_score", 0.5)
+                "tags": entry.get("tags", []),
+                "execution": entry.get("execution"),
+                "relevance_score": entry.get("relevance_score", 0.5)
             })
-        
-        # Add mid-term entries
-        for entry in result.get("retrieved_pages", []):
-            conversations.append({
-                "message_id": entry.get("meta_info", {}).get("segment_id", "unknown"),
-                "conversation_timestamp": entry.get("timestamp", ""),
-                "user_input": entry.get("user_input", ""),
-                "agent_response": entry.get("agent_response", ""),
-                "meta_data": entry.get("meta_info", {}),
-                "has_execution_memory": False,  # TODO: Check if execution exists
-                "relevance_score": entry.get("meta_info", {}).get("similarity_score", 0.5)
-            })
-        
-        # Determine query type
-        query_type = "specific_message" if message_id else "general"
-        if time_range:
-            query_type = "time_filtered"
         
         return {
             "content": [{
@@ -454,11 +362,8 @@ def handle_retrieve_conversation_memory(params: Dict[str, Any]) -> Dict[str, Any
                         "status": "success",
                         "query": query,
                         "explanation": explanation,
-                        "query_type": query_type,
-                        "retrieval_strategy": retrieval_strategy,
-                        "requested_message_id": message_id,
                         "retrieval_timestamp": datetime.now().isoformat(),
-                        "time_range": time_range,
+                        "tags_filter": tags_filter,
                         "conversations": conversations[:max_results],
                         "total_found": len(conversations),
                         "returned_count": min(len(conversations), max_results),
@@ -494,293 +399,24 @@ def handle_retrieve_conversation_memory(params: Dict[str, Any]) -> Dict[str, Any
             "isError": True
         }
 
-def handle_add_execution_memory(params: Dict[str, Any]) -> Dict[str, Any]:
-    """Handle add_execution_memory tool call"""
-    try:
-        # Extract parameters
-        arguments = params.get("arguments", {})
-        if "params" in arguments:
-            actual_params = arguments["params"]
-        else:
-            actual_params = arguments
-        
-        # Extract required fields (flattened structure)
-        message_id = actual_params.get("message_id")
-        explanation = actual_params.get("explanation")
-        execution_summary = actual_params.get("execution_summary")
-        tools_used = actual_params.get("tools_used", [])
-        errors = actual_params.get("errors", [])
-        observations = actual_params.get("observations")
-        success = actual_params.get("success")
-        user_id = actual_params.get("user_id")
-        duration_ms = actual_params.get("duration_ms")
-        timestamp = actual_params.get("timestamp")
-        meta_data = actual_params.get("meta_data", {})
-        
-        if not all([message_id, explanation, execution_summary, user_id, observations]) or success is None:
-            return {
-                "error": {
-                    "code": -32602,
-                    "message": "Invalid parameters: message_id, explanation, execution_summary, observations, success, and user_id are required"
-                }
-            }
-        
-        logger.info(f">>> Tool: 'add_execution_memory' called for user '{user_id}' with message_id '{message_id}'")
-        
-        # Get user-specific MemoryOS instance
-        memoryos_instance = get_memoryos_for_user(user_id)
-        
-        # Use provided timestamp or current time
-        timestamp = timestamp or datetime.now().isoformat()
-        
-        # Add execution memory
-        result = memoryos_instance.add_execution_memory(
-            message_id=message_id,
-            execution_summary=execution_summary,
-            tools_used=tools_used,
-            errors=errors,
-            observations=observations,
-            success=success,
-            duration_ms=duration_ms,
-            timestamp=timestamp,
-            meta_data=meta_data
-        )
-        
-        return {
-            "content": [{
-                "type": "text",
-                "text": json.dumps({
-                    "success": result.get("status") == "success",
-                    "message": result.get("message", "Execution memory added"),
-                    "data": {
-                        "status": result.get("status"),
-                        "message_id": message_id,
-                        "timestamp": timestamp,
-                        "details": {
-                            "execution_summary": execution_summary[:100] + "..." if len(execution_summary) > 100 else execution_summary,
-                            "tools_used": tools_used,
-                            "errors": errors,
-                            "duration_ms": duration_ms,
-                            "success": success,
-                            "has_meta_data": bool(meta_data),
-                            "memory_processing": "Added to execution memory with embedding generation"
-                        }
-                    }
-                }, indent=2)
-            }],
-            "isError": result.get("status") != "success"
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in add_execution_memory: {e}")
-        return {
-            "content": [{
-                "type": "text",
-                "text": json.dumps({
-                    "success": False,
-                    "message": f"Error adding execution memory: {str(e)}",
-                    "data": {
-                        "status": "error",
-                        "message_id": actual_params.get("message_id", "unknown"),
-                        "timestamp": datetime.now().isoformat()
-                    }
-                })
-            }],
-            "isError": True
-        }
 
-def handle_retrieve_execution_memory(params: Dict[str, Any]) -> Dict[str, Any]:
-    """Handle retrieve_execution_memory tool call"""
-    try:
-        # Extract parameters
-        arguments = params.get("arguments", {})
-        if "params" in arguments:
-            actual_params = arguments["params"]
-        else:
-            actual_params = arguments
-        
-        # Extract fields
-        explanation = actual_params.get("explanation")
-        query = actual_params.get("query")
-        user_id = actual_params.get("user_id")
-        message_id = actual_params.get("message_id")
-        max_results = actual_params.get("max_results", 10)
-        retrieval_strategy = actual_params.get("retrieval_strategy", "hybrid")
-        
-        if not all([explanation, query, user_id]):
-            return {
-                "error": {
-                    "code": -32602,
-                    "message": "Invalid params: explanation, query, and user_id are required"
-                }
-            }
-        
-        logger.info(f">>> Tool: 'retrieve_execution_memory' called for user '{user_id}' with query: '{query[:50]}...'")
-        
-        # Import datetime for timestamp operations
-        from datetime import datetime
-        
-        # Get user-specific MemoryOS instance
-        memoryos_instance = get_memoryos_for_user(user_id)
-        
-        # Handle different retrieval strategies
-        if message_id:
-            # Direct message ID lookup (overrides strategy)
-            result = memoryos_instance.retrieve_execution_memory(
-                query=query,
-                message_id=message_id,
-                max_results=max_results
-            )
-        elif retrieval_strategy == "recent":
-            # Get most recent execution records
-            recent_executions = list(memoryos_instance.execution_memory.executions)[-max_results:]
-            result = {
-                "status": "success",
-                "timestamp": datetime.now().isoformat(),
-                "query": query,
-                "message_id": None,
-                "results": recent_executions,
-                "execution_patterns": memoryos_instance.execution_memory.get_execution_patterns(),
-                "total_found": len(recent_executions)
-            }
-        elif retrieval_strategy == "keyword":
-            # Keyword search in execution details
-            keyword_results = []
-            query_words = set(query.lower().split())
-            
-            for execution in memoryos_instance.execution_memory.executions:
-                # Search in execution_summary, tools_used, and observations
-                searchable_text = " ".join([
-                    execution.get("execution_summary", ""),
-                    " ".join(execution.get("tools_used", [])),
-                    execution.get("observations", "")
-                ]).lower()
-                
-                # Check for keyword matches
-                text_words = set(searchable_text.split())
-                matches = len(query_words.intersection(text_words))
-                
-                if matches > 0:
-                    execution_copy = execution.copy()
-                    execution_copy["similarity_score"] = matches / len(query_words)  # Match ratio
-                    keyword_results.append(execution_copy)
-            
-            # Sort by match score and limit results
-            keyword_results.sort(key=lambda x: x.get("similarity_score", 0), reverse=True)
-            keyword_results = keyword_results[:max_results]
-            
-            result = {
-                "status": "success",
-                "timestamp": datetime.now().isoformat(),
-                "query": query,
-                "message_id": None,
-                "results": keyword_results,
-                "execution_patterns": memoryos_instance.execution_memory.get_execution_patterns(),
-                "total_found": len(keyword_results)
-            }
-        else:
-            # Default hybrid (semantic embedding search)
-            result = memoryos_instance.retrieve_execution_memory(
-                query=query,
-                message_id=message_id,
-                max_results=max_results
-            )
-        
-        # Format for execution memory schema
-        executions = []
-        for exec_record in result.get("results", []):
-            executions.append({
-                "message_id": exec_record.get("message_id", "unknown"),
-                "execution_timestamp": exec_record.get("timestamp", ""),
-                "execution_details": {
-                    "execution_summary": exec_record.get("execution_summary", ""),
-                    "tools_used": exec_record.get("tools_used", []),
-                    "errors": exec_record.get("errors", []),
-                    "observations": exec_record.get("observations", "")
-                },
-                "success": exec_record.get("success", False),
-                "duration_ms": exec_record.get("duration_ms", 0),
-                "relevance_score": exec_record.get("similarity_score", 0.5)
-            })
-        
-        # Determine query type
-        query_type = "specific_message" if message_id else "general"
-        
-        return {
-            "content": [{
-                "type": "text",
-                "text": json.dumps({
-                    "success": True,
-                    "message": f"Retrieved {len(executions)} execution memories",
-                    "data": {
-                        "status": "success",
-                        "query": query,
-                        "explanation": explanation,
-                        "query_type": query_type,
-                        "retrieval_strategy": retrieval_strategy,
-                        "requested_message_id": message_id,
-                        "retrieval_timestamp": datetime.now().isoformat(),
-                        "executions": executions[:max_results],
-                        "total_found": len(executions),
-                        "returned_count": min(len(executions), max_results),
-                        "max_results_applied": len(executions) > max_results
-                    }
-                }, indent=2)
-            }],
-            "isError": False
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in retrieve_execution_memory: {e}")
-        return {
-            "content": [{
-                "type": "text",
-                "text": json.dumps({
-                    "success": False,
-                    "message": f"Error retrieving execution memory: {str(e)}",
-                    "data": {
-                        "status": "error",
-                        "query": actual_params.get("query", ""),
-                        "explanation": actual_params.get("explanation", ""),
-                        "query_type": "error",
-                        "retrieval_strategy": actual_params.get("retrieval_strategy", "hybrid"),
-                        "retrieval_timestamp": datetime.now().isoformat(),
-                        "executions": [],
-                        "total_found": 0,
-                        "returned_count": 0,
-                        "max_results_applied": False
-                    }
-                })
-            }],
-            "isError": True
-        }
 
-# MCP 2.0 Tool Registry - Clean Dual Memory System
+
+
+# MCP 2.0 Tool Registry - Unified Memory System
 MCP_TOOLS = {
-    # Core dual memory system tools
+    # Core memory system tool
     "add_conversation_memory": {
         "name": "add_conversation_memory",
-        "description": "Store conversation pair (user input and agent response) in MemoryOS dual memory system",
+        "description": "Store conversation and optional execution data in MemoryOS",
         "inputSchema": load_schema("add_conversation_input.json"),
         "handler": handle_add_conversation_memory
     },
     "retrieve_conversation_memory": {
         "name": "retrieve_conversation_memory", 
-        "description": "Retrieve conversation pairs with execution links from MemoryOS dual memory system",
+        "description": "Retrieve conversation context, with optional execution data filtering",
         "inputSchema": load_schema("retrieve_conversation_input.json"),
         "handler": handle_retrieve_conversation_memory
-    },
-    "add_execution_memory": {
-        "name": "add_execution_memory",
-        "description": "Store execution details linked to conversation memory via message_id",
-        "inputSchema": load_schema("add_execution_input.json"),
-        "handler": handle_add_execution_memory
-    },
-    "retrieve_execution_memory": {
-        "name": "retrieve_execution_memory",
-        "description": "Retrieve execution patterns and details for learning from past problem-solving approaches",
-        "inputSchema": load_schema("retrieve_execution_input.json"),
-        "handler": handle_retrieve_execution_memory
     },
     
     # Utility tools

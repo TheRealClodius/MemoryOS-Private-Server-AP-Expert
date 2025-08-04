@@ -9,4 +9,3 @@ httpx>=0.25.0
 pydantic
 requests
 fastmcp==2.6.1
-mcp

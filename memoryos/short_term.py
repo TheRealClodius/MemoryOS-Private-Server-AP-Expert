@@ -76,17 +76,27 @@ class ShortTermMemory:
         agent_response: str, 
         message_id: Optional[str] = None,
         timestamp: Optional[str] = None,
-        meta_data: Optional[Dict[str, Any]] = None
+        meta_data: Optional[Dict[str, Any]] = None,
+        tools_used: Optional[List[str]] = None,
+        errors: Optional[List[Dict[str, str]]] = None,
+        duration_ms: Optional[int] = None,
+        success: Optional[bool] = None,
+        tags: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
-        Add a question-answer pair to short-term memory
+        Add a question-answer pair to short-term memory with optional execution data
         
         Args:
             user_input: The user's input/question
             agent_response: The agent's response
-            message_id: Optional message ID for linking conversation and execution memories
+            message_id: Optional message ID for linking
             timestamp: Optional timestamp (uses current time if not provided)
             meta_data: Optional metadata dictionary
+            tools_used: Optional list of tools used during execution
+            errors: Optional list of error dictionaries
+            duration_ms: Optional execution duration in milliseconds
+            success: Optional execution success status
+            tags: Optional tags for filtering (e.g., ["conversation", "execution"])
             
         Returns:
             Dictionary containing the stored memory entry
@@ -99,6 +109,12 @@ class ShortTermMemory:
             import uuid
             message_id = str(uuid.uuid4())
         
+        # Set default tags
+        if tags is None:
+            tags = ["conversation"]
+            if any([tools_used, errors is not None, duration_ms is not None, success is not None]):
+                tags.append("execution")
+        
         qa_pair = {
             "message_id": message_id,
             "user_input": user_input,
@@ -106,7 +122,15 @@ class ShortTermMemory:
             "timestamp": timestamp,
             "meta_data": meta_data or {},
             "access_count": 0,
-            "last_accessed": timestamp
+            "last_accessed": timestamp,
+            "tags": tags,
+            # Execution data (only included if provided)
+            "execution": {
+                "tools_used": tools_used or [],
+                "errors": errors or [],
+                "duration_ms": duration_ms,
+                "success": success
+            } if any([tools_used, errors, duration_ms is not None, success is not None]) else None
         }
         
         # Check if we need to handle overflow before adding
@@ -248,6 +272,97 @@ class ShortTermMemory:
             except (ValueError, KeyError):
                 # Skip entries with invalid timestamps
                 continue
+        
+        return results
+    
+    def get_by_tags(self, tags: List[str], match_all: bool = False) -> List[Dict[str, Any]]:
+        """
+        Get memory entries filtered by tags
+        
+        Args:
+            tags: List of tags to filter by
+            match_all: If True, entry must have ALL tags. If False, entry needs ANY tag.
+            
+        Returns:
+            List of matching memory entries
+        """
+        results = []
+        memory_list = list(self.memory)
+        
+        for entry in memory_list:
+            entry_tags = set(entry.get("tags", []))
+            search_tags = set(tags)
+            
+            if match_all:
+                # Entry must have ALL search tags
+                if search_tags.issubset(entry_tags):
+                    results.append(entry)
+            else:
+                # Entry must have ANY search tag
+                if search_tags.intersection(entry_tags):
+                    results.append(entry)
+        
+        return results
+    
+    def get_recent_by_tags(self, tags: List[str], count: int = 5, match_all: bool = False) -> List[Dict[str, Any]]:
+        """
+        Get recent memory entries filtered by tags
+        
+        Args:
+            tags: List of tags to filter by
+            count: Number of recent entries to return
+            match_all: If True, entry must have ALL tags. If False, entry needs ANY tag.
+            
+        Returns:
+            List of recent matching memory entries
+        """
+        filtered_entries = self.get_by_tags(tags, match_all)
+        if count <= 0:
+            return filtered_entries
+        return filtered_entries[-count:] if len(filtered_entries) > count else filtered_entries
+    
+    def search_execution_by_tools(self, tools: List[str]) -> List[Dict[str, Any]]:
+        """
+        Search for entries that used specific tools (execution context only)
+        
+        Args:
+            tools: List of tools to search for
+            
+        Returns:
+            List of matching entries with execution data
+        """
+        results = []
+        tool_set = set(tool.lower() for tool in tools)
+        
+        # Only search entries with execution tag
+        execution_entries = self.get_by_tags(["execution"])
+        
+        for entry in execution_entries:
+            execution_data = entry.get("execution", {})
+            entry_tools = set(tool.lower() for tool in execution_data.get("tools_used", []))
+            
+            if tool_set.intersection(entry_tools):
+                results.append(entry)
+        
+        return results
+    
+    def search_execution_by_success(self, success: bool) -> List[Dict[str, Any]]:
+        """
+        Search for entries by execution success status
+        
+        Args:
+            success: Success status to filter by
+            
+        Returns:
+            List of matching entries
+        """
+        results = []
+        execution_entries = self.get_by_tags(["execution"])
+        
+        for entry in execution_entries:
+            execution_data = entry.get("execution", {})
+            if execution_data.get("success") == success:
+                results.append(entry)
         
         return results
     

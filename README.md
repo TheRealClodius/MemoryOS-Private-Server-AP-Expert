@@ -112,7 +112,7 @@ MemoryOS implements a sophisticated three-tier memory hierarchy inspired by oper
 
    **Option B: Configuration File**
    ```bash
-   cp config.template.json config.json
+   cp config.simple.json config.json
    # Edit config.json to add your OpenAI API key
    ```
    
@@ -134,9 +134,6 @@ MemoryOS implements a sophisticated three-tier memory hierarchy inspired by oper
    ```bash
    # Start pure MCP 2.0 server
    python mcp_server.py
-   
-   # Or use main entry point
-   python main.py
    ```
 
 ### Deployment Options
@@ -447,17 +444,19 @@ export MEMORYOS_LOG_LEVEL="INFO"                    # Logging level
 ### Configuration File Options
 ```json
 {
-  "user_id": "your_unique_id",
+  "openai_api_key": "your-openai-api-key-here",
   "openai_base_url": "https://api.openai.com/v1",
   "data_storage_path": "./memoryos_data",
-  "assistant_id": "mcp_assistant",
   "llm_model": "gpt-4o-mini",
   "embedding_model": "text-embedding-3-small",
   "short_term_capacity": 7,
   "mid_term_capacity": 2000,
   "long_term_knowledge_capacity": 100,
   "retrieval_queue_capacity": 7,
-  "mid_term_heat_threshold": 5.0
+  "mid_term_heat_threshold": 5.0,
+  "api_keys": {
+    "your-api-key": {"user": "user_id", "description": "Description"}
+  }
 }
 ```
 
@@ -616,24 +615,12 @@ memoryos_data/
 
 ## 🚀 Deployment Guide
 
-### Development
+### Development & Production
 ```bash
-# Local development
+# Start MCP server (works for both dev and production)
 python mcp_server.py
 
-# Test with sample data
-python simple_memory_test.py
-```
-
-### Production
-```bash
-# Production HTTP server
-python mcp_server.py
-
-# With process management
-python mcp_server.py
-
-# Docker deployment (if needed)
+# Docker deployment (if needed)  
 docker build -t memoryos .
 docker run -p 5000:5000 -e OPENAI_API_KEY=$OPENAI_API_KEY memoryos
 ```

@@ -324,8 +324,10 @@ def handle_retrieve_conversation_memory(params: Dict[str, Any]) -> Dict[str, Any
         # Get user-specific MemoryOS instance
         memoryos_instance = get_memoryos_for_user(user_id)
         
-        # Generate query embedding for comprehensive memory search
-        query_embedding = memoryos_instance._generate_embedding(query)
+        # Only generate embedding if needed for hybrid search (not for recent/keyword strategies)
+        query_embedding = None
+        if retrieval_strategy == "hybrid" and not time_range:
+            query_embedding = memoryos_instance._generate_embedding(query)
         
         # Import datetime for all time operations
         from datetime import datetime, timedelta
@@ -917,9 +919,13 @@ async def handle_mcp_request(request: Request, api_key: str = Security(verify_ap
                     }
                 })
             
-            # Execute tool
+            # Execute tool asynchronously to prevent blocking
+            import asyncio
             tool_handler = MCP_TOOLS[tool_name]["handler"]
-            result = tool_handler(params)
+            
+            # Run memory operations in thread pool to prevent blocking HTTP response
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, tool_handler, params)
             
             return JSONResponse({
                 "jsonrpc": "2.0",
